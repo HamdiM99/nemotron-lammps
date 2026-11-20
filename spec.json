@@ -1,0 +1,2 @@
+{"structure": {"size_x_nm": 5, "size_y_nm": 5},
+ "input": {"task": "tensile", "equil_steps": 3000, "strain_rate_per_ps": 0.005}}

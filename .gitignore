@@ -1,0 +1,13 @@
+# sorties de simulation et dossiers de travail
+run/
+runs/
+bench/runs/
+
+# pages et images regenerees par viewer/build_viewer.py et viewer/make_video.py (docs/index.html est versionne)
+viewer/artifact.html
+viewer/graphene_viewer.html
+viewer/video_frames/
+
+__pycache__/
+.pytest_cache/
+.env

@@ -1,0 +1,483 @@
+<title>Graphene Tensile Bench</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@500;600&display=swap">
+<style>
+/* Mise en page : un banc d'essai. La feuille 3D occupe la gauche, les mesures et la courbe la droite,
+   le protocole suivi par l'agent en dessous. */
+:root {
+  --bg: #F2F4F7; --surface: #FFFFFF; --stage: #E6EAF0; --ink: #16202B; --muted: #5A6777; --line: #D3DAE3;
+  --accent: #1463C6; --stretch: #D9542B; --compress: #2B7FD9; --bond: #8A95A2; --atom: #3B4654;
+  --defect: #C98A00; --good: #1F7A4D; --bad: #B3261E;
+  --display: "Space Grotesk", "Segoe UI", system-ui, sans-serif;
+  --body: "Inter", "Segoe UI", system-ui, sans-serif;
+  --mono: "JetBrains Mono", "Cascadia Mono", Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0B1016; --surface: #121A23; --stage: #080C11; --ink: #E6ECF2; --muted: #8E9BAB; --line: #243140;
+  --accent: #5AA9FF; --stretch: #FF7A4D; --compress: #4DA3FF; --bond: #6F7C8A; --atom: #A9B5C2;
+  --defect: #FFC233; --good: #4CC38A; --bad: #FF7B72; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #0B1016; --surface: #121A23; --stage: #080C11; --ink: #E6ECF2; --muted: #8E9BAB; --line: #243140;
+  --accent: #5AA9FF; --stretch: #FF7A4D; --compress: #4DA3FF; --bond: #6F7C8A; --atom: #A9B5C2;
+  --defect: #FFC233; --good: #4CC38A; --bad: #FF7B72; color-scheme: dark }
+
+*, *::before, *::after { box-sizing: border-box }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.55 var(--body) }
+.wrap { max-width: 1240px; margin: 0 auto; padding-block: 28px 48px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: flex; flex-direction: column; gap: 22px }
+h1, h2 { font-family: var(--display); font-weight: 600; margin: 0; text-wrap: balance }
+h1 { font-size: clamp(1.5rem, 3.2vw, 2.1rem); letter-spacing: -0.01em; line-height: 1.15 }
+h2 { font-size: 1.05rem }
+.eyebrow { font: 500 0.72rem var(--mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted) }
+.mono { font-family: var(--mono); font-variant-numeric: tabular-nums }
+.muted { color: var(--muted) }
+
+header { display: flex; flex-direction: column; gap: 10px }
+.prompt { font-size: 1rem; max-width: 65ch; color: var(--muted) }
+.prompt q { color: var(--ink); quotes: "“" "”" }
+.tags { display: flex; flex-wrap: wrap; gap: 8px; list-style: none; margin: 0; padding: 0 }
+.tags li { font: 500 0.75rem var(--mono); padding: 3px 9px; border: 1px solid var(--line); border-radius: 999px; color: var(--muted) }
+
+.bench { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr); gap: 22px; align-items: start }
+@media (max-width: 880px) { .bench { grid-template-columns: minmax(0, 1fr) } }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 10px }
+
+.stage { position: relative; background: var(--stage); border-radius: 10px 10px 0 0; aspect-ratio: 16 / 10; max-width: 100%; overflow: hidden }
+.stage canvas { display: block; width: 100%; height: 100%; touch-action: none; cursor: grab }
+.stage canvas:active { cursor: grabbing }
+.readout { position: absolute; top: 12px; left: 14px; display: flex; flex-direction: column; gap: 2px; pointer-events: none }
+.readout .big { font: 500 1.6rem/1.1 var(--mono); font-variant-numeric: tabular-nums }
+.legend3d { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 22px; padding: 10px 14px;
+  font-size: 0.75rem; color: var(--muted); border-bottom: 1px solid var(--line) }
+.scale { display: inline-flex; align-items: center; gap: 8px; font-family: var(--mono) }
+.ramp { width: 120px; height: 6px; border-radius: 3px;
+  background: linear-gradient(90deg, var(--compress), var(--bond), var(--stretch)) }
+.key { display: inline-flex; align-items: center; gap: 6px }
+.dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block }
+.fallback { position: absolute; inset: 0; display: grid; place-items: center; padding: 24px; text-align: center; color: var(--muted) }
+
+.transport { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; padding: 12px 14px }
+.transport input[type=range] { flex: 1 1 180px; min-width: 0; accent-color: var(--accent) }
+button, select { font: 500 0.82rem var(--body); color: var(--ink); background: var(--surface); border: 1px solid var(--line);
+  border-radius: 7px; padding: 6px 12px; cursor: pointer }
+button:hover, select:hover { border-color: var(--muted) }
+button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px }
+button.primary { background: var(--accent); border-color: var(--accent); color: var(--surface); min-width: 86px }
+
+.side { display: flex; flex-direction: column; gap: 22px; min-width: 0 }
+.result { padding: 18px 18px 16px; display: flex; flex-direction: column; gap: 14px }
+.hero { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap }
+.hero .value { font: 600 2.6rem/1 var(--display); font-variant-numeric: tabular-nums }
+.hero .unit { font: 500 1.1rem var(--display); color: var(--muted) }
+dl.facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 16px; margin: 0 }
+dl.facts div { min-width: 0 }
+dl.facts dt { font-size: 0.72rem; color: var(--muted) }
+dl.facts dd { margin: 0; font: 500 0.92rem var(--mono); font-variant-numeric: tabular-nums; overflow-wrap: anywhere }
+.status { display: inline-flex; align-items: center; gap: 6px; font-size: 0.8rem }
+.status.ok { color: var(--good) } .status.warn { color: var(--bad) }
+
+.chart { padding: 16px 18px 12px; display: flex; flex-direction: column; gap: 8px }
+.chart svg { display: block; width: 100%; height: auto; overflow: visible }
+.chart text { font: 11px var(--mono); fill: var(--muted) }
+.chart .axis { stroke: var(--line); stroke-width: 1; fill: none }
+.chart .grid { stroke: var(--line); stroke-width: 1; stroke-dasharray: 2 4; fill: none }
+.chart .sim { stroke: var(--accent); stroke-width: 1.5; fill: none; stroke-linejoin: round }
+.chart .fit { stroke: var(--ink); stroke-width: 1.5; stroke-dasharray: 6 4; fill: none }
+.chart .cursor { fill: var(--accent); stroke: var(--surface); stroke-width: 2 }
+.chart .hair { stroke: var(--muted); stroke-width: 1; fill: none }
+.chart-legend { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 0.78rem; color: var(--muted) }
+.swatch { display: inline-block; width: 18px; height: 0; border-top: 2px solid var(--accent); vertical-align: middle; margin-right: 6px }
+.swatch.fit { border-top: 2px dashed var(--ink) }
+.tip { font: 0.78rem var(--mono); color: var(--muted); min-height: 1.3em; font-variant-numeric: tabular-nums }
+
+.lower { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr); gap: 22px; align-items: start }
+@media (max-width: 880px) { .lower { grid-template-columns: minmax(0, 1fr) } }
+.block { padding: 18px; display: flex; flex-direction: column; gap: 12px; min-width: 0 }
+ol.steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0 }
+ol.steps li { display: grid; grid-template-columns: 26px minmax(0, 1fr) auto; gap: 4px 10px; padding: 10px 0; border-top: 1px solid var(--line); align-items: baseline }
+ol.steps li:first-child { border-top: 0; padding-top: 0 }
+ol.steps .n { font: 500 0.78rem var(--mono); color: var(--muted) }
+ol.steps .name { font: 500 0.9rem var(--mono) }
+ol.steps .args { grid-column: 2 / -1; font: 0.78rem var(--mono); color: var(--muted); overflow-wrap: anywhere }
+ol.steps .err { grid-column: 2 / -1; font-size: 0.8rem; color: var(--bad) }
+.block p { margin: 0; max-width: 65ch }
+ol.flow { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; align-items: stretch; gap: 8px 22px }
+ol.flow li { position: relative; display: flex; flex-direction: column; justify-content: center; gap: 1px;
+  padding: 5px 10px; border: 1px solid var(--line); border-radius: 6px; white-space: nowrap }
+ol.flow li + li::before { content: "→"; position: absolute; left: -17px; top: 50%; transform: translateY(-50%); color: var(--muted); font: 0.8rem var(--mono) }
+ol.flow li.io { background: var(--stage) }
+ol.flow .step { font: 500 0.78rem var(--mono) }
+ol.flow .sub { font-size: 0.68rem; color: var(--muted) }
+.contact { font-size: 0.8rem; color: var(--muted) } .contact .mail { font-family: var(--mono); user-select: all }
+ol.flow li .ok { color: var(--good) } ol.flow li .ko { color: var(--bad) }
+dl.facts dd.text { font-family: var(--body); font-weight: 500 }
+dl.facts div.wide { grid-column: 1 / -1 }
+dl.facts div.wide:last-child dd { user-select: all }
+ul.limits { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px }
+footer { font-size: 0.78rem; color: var(--muted) }
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto } }
+/* mode capture (?capture&f=..&az=..) : une image fixe par appel, pour assembler une video */
+.capture .lower, .capture footer, .capture .tip, .capture .transport button, .capture .transport select { display: none }
+.capture .wrap { padding-block: 22px }
+</style>
+
+<div class="wrap">
+  <header>
+    <span class="eyebrow">Molecular dynamics · uniaxial tensile test</span>
+    <h1>A graphene sheet stretched by an LLM agent, checked by the solver</h1>
+    <p class="prompt">Request given to the agent: <q id="prompt"></q></p>
+  </header>
+
+  <section class="bench">
+    <div class="side">
+    <div class="panel">
+      <div class="stage" id="stage">
+        <canvas id="gl" aria-label="3D view of the graphene sheet under tension"></canvas>
+        <div class="readout">
+          <span class="eyebrow">Strain along x</span>
+          <span class="big" id="r-strain">0.00%</span>
+          <span class="mono muted" id="r-stress"></span>
+          <span class="mono muted" id="r-bonds"></span>
+        </div>
+      </div>
+      <div class="legend3d">
+        <span class="scale">C–C bond elongation <span>−4%</span><span class="ramp"></span><span>+4%</span></span>
+        <span class="key"><span class="dot" style="background: var(--defect)"></span>vacancy-edge atom</span>
+        <span class="key"><span class="dot" style="border: 1px dashed var(--muted)"></span>dashed frame: initial box</span>
+      </div>
+      <div class="transport">
+        <button class="primary" id="play" type="button">Play</button>
+        <input type="range" id="scrub" min="0" max="0" value="0" step="1" aria-label="Trajectory frame">
+        <span class="mono muted" id="r-frame"></span>
+        <select id="speed" aria-label="Playback speed">
+          <option value="6">Slow</option><option value="14" selected>Normal</option><option value="30">Fast</option>
+        </select>
+        <button id="view-top" type="button">Top view</button>
+        <button id="view-3d" type="button">Tilted view</button>
+      </div>
+    </div>
+    <div class="panel block" id="flow-card">
+      <span class="eyebrow">Agentic flow</span>
+      <ol class="flow" id="flow"></ol>
+      <span class="contact">Mustapha Hamdi · <span class="mail">mustapha.hamdi@innodeep.net</span></span>
+    </div>
+    </div>
+
+    <div class="side">
+      <div class="panel result">
+        <span class="eyebrow">Measured Young's modulus</span>
+        <div class="hero"><span class="value" id="young"></span><span class="unit">TPa</span></div>
+        <span class="status" id="status"></span>
+        <dl class="facts" id="facts"></dl>
+      </div>
+      <div class="panel chart">
+        <h2>Stress versus strain</h2>
+        <div class="chart-legend">
+          <span><span class="swatch"></span>simulation (σ<sub>xx</sub>)</span>
+          <span><span class="swatch fit"></span>linear fit, slope = E</span>
+        </div>
+        <svg id="chart" viewBox="0 0 420 270" role="img" aria-label="Stress-strain curve"></svg>
+        <div class="tip" id="tip">Hover the curve to read values.</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="lower">
+    <div class="panel block">
+      <span class="eyebrow">Protocol</span>
+      <h2>What the model asked for, what the code answered</h2>
+      <p class="muted">The model only has four bounded tools. It picks parameters; the code generates the LAMMPS input,
+        rejects anything out of bounds and only allows the full run after a short run has succeeded.</p>
+      <ol class="steps" id="steps"></ol>
+    </div>
+    <div class="panel block">
+      <span class="eyebrow">Scope</span>
+      <h2>What this measurement does not tell you</h2>
+      <ul class="limits">
+        <li>Classical potential: the value depends on the chosen potential and does not replace an ab initio calculation.</li>
+        <li>Linear regime only: strain is capped at 5%, so the sheet stretches but does not break.</li>
+        <li>No electronic properties and no thermal conductivity.</li>
+        <li>Molecular-dynamics strain rate, far higher than in a real test.</li>
+        <li>A single random draw of vacancies; stress uses the conventional thickness of <span id="thick"></span> Å.</li>
+      </ul>
+    </div>
+  </section>
+  <footer id="foot"></footer>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+const D = /*__DATA__*/null;
+const $ = id => document.getElementById(id);
+const Q = new URLSearchParams(location.search), CAP = Q.has("capture");
+if (CAP) document.body.classList.add("capture");
+const fr = (v, d) => Number(v).toLocaleString("en-US", { minimumFractionDigits: d, maximumFractionDigits: d });
+const css = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+
+/* ---------- textes ---------- */
+const S = D.spec, R = D.result, T = D.traj;
+$("prompt").textContent = D.meta.prompt;
+$("thick").textContent = fr(D.meta.thickness_A, 2);
+$("young").textContent = fr(R.young_TPa, 3);
+const st = $("status");
+if (D.warnings.length) { st.className = "status warn"; st.textContent = "⚠ " + D.warnings.join(" · "); }
+else { st.className = "status ok"; st.textContent = "✓ Plausibility checks passed, no warnings"; }
+const facts = [
+  ["Fit quality R²", fr(R.fit_r2, 3)],
+  ["Atoms", fr(D.structure.n_atoms, 0)],
+  ["Vacancies", fr(D.structure.n_vacancies, 0) + " (" + fr(D.structure.vacancy_pct, 1) + "%)"],
+  ["Sheet", fr(D.structure.lx_A / 10, 1) + " × " + fr(D.structure.ly_A / 10, 1) + " nm"],
+  ["Temperature", fr(S.temperature_K, 0) + " K"],
+  ["Timestep", fr(S.timestep_fs, 2) + " fs"],
+  ["Strain rate", fr(S.strain_rate_per_ps * 100, 2) + "%/ps"],
+  ["Lattice parameter", fr(R.lattice_A, 3) + " Å"],
+  ["Potential energy", fr(R.epot_eV_per_atom, 3) + " eV/atom"],
+  ["Equilibration", fr(S.equil_steps, 0) + " steps"],
+];
+for (const [k, v] of facts) {
+  const d = document.createElement("div");
+  d.appendChild(Object.assign(document.createElement("dt"), { textContent: k }));
+  d.appendChild(Object.assign(document.createElement("dd"), { textContent: v }));
+  $("facts").appendChild(d);
+}
+/* flux agentique : la sequence reelle des appels d'outils (trace.jsonl), avec le modele, le champ de force
+   et le solveur en sous-libelle de l'etape qui les utilise */
+(function () {
+  const flow = $("flow"), add = (text, sub, cls, mark) => {
+    const li = Object.assign(document.createElement("li"), { className: cls || "" });
+    const name = Object.assign(document.createElement("span"), { className: "step", textContent: text });
+    if (mark) name.appendChild(Object.assign(document.createElement("span"), { className: mark === "✓" ? "ok" : "ko", textContent: " " + mark }));
+    li.appendChild(name);
+    if (sub) li.appendChild(Object.assign(document.createElement("span"), { className: "sub", textContent: sub }));
+    flow.appendChild(li);
+  };
+  const ff = S.potential.charAt(0).toUpperCase() + S.potential.slice(1) + " (" + S.potential_file + ")";
+  const sub = s => s.name === "write_input" ? "force field: " + ff : s.name === "run" ? "LAMMPS" : s.name === "build_structure" ? T.n + " atoms" : "";
+  add("prompt", "", "io");
+  add("LLM picks parameters", D.meta.model.split("/").pop(), "io");
+  for (const s of D.steps) add(s.name === "run" ? "run(" + (s.args.mode || "?") + ")" : s.name, sub(s), "", s.ok ? "✓" : "✕");
+  add("answer + assumptions", "", "io");
+})();
+D.steps.forEach((s, i) => {
+  const li = document.createElement("li");
+  const args = Object.entries(s.args).map(([k, v]) => k + " = " + v).join("   ");
+  li.appendChild(Object.assign(document.createElement("span"), { className: "n", textContent: String(i + 1).padStart(2, "0") }));
+  li.appendChild(Object.assign(document.createElement("span"), { className: "name", textContent: s.name }));
+  li.appendChild(Object.assign(document.createElement("span"),
+    { className: "status " + (s.ok ? "ok" : "warn"), textContent: s.ok ? "✓ accepted" : "✕ rejected" }));
+  if (args) li.appendChild(Object.assign(document.createElement("span"), { className: "args", textContent: args }));
+  if (s.errors.length) li.appendChild(Object.assign(document.createElement("span"), { className: "err", textContent: s.errors.join(" · ") }));
+  $("steps").appendChild(li);
+});
+$("foot").textContent = "Trajectory: " + T.count + " frames of " + T.n + " atoms, written by LAMMPS during the pull. "
+  + "Bonds are listed once on the initial structure (minimum-image convention) and count as broken only beyond 2.0 Å. "
+  + "Their colour compares each length with the mean of the first frame; thermal motion at "
+  + fr(S.temperature_K, 0) + " K adds noise to them.";
+
+/* ---------- trajectoire ---------- */
+const raw = Uint8Array.from(atob(T.pos), c => c.charCodeAt(0));
+const q = new Int16Array(raw.buffer);
+const N = T.n, F = T.count, B0 = T.boxes[0];
+const cx = (B0[0] + B0[1]) / 2, cy = (B0[2] + B0[3]) / 2;
+let cz = 0; for (let i = 0; i < N; i++) cz += q[3 * i + 2]; cz = cz / N / 100;
+const lx0 = B0[1] - B0[0];
+const strainOf = f => (T.boxes[f][1] - T.boxes[f][0] - lx0) / lx0;
+function positions(f) {
+  /* atomes replies dans la boite periodique de l'image f, puis centres sur la boite initiale */
+  const b = T.boxes[f], lx = b[1] - b[0], ly = b[3] - b[2], p = new Float32Array(3 * N), o = f * 3 * N;
+  for (let i = 0; i < N; i++) {
+    let x = q[o + 3 * i] / 100, y = q[o + 3 * i + 1] / 100;
+    x -= lx * Math.floor((x - b[0]) / lx); y -= ly * Math.floor((y - b[2]) / ly);
+    p[3 * i] = x - cx; p[3 * i + 1] = y - cy; p[3 * i + 2] = q[o + 3 * i + 2] / 100 - cz;
+  }
+  return p;
+}
+/* Liaisons : liste etablie UNE fois sur la structure initiale (seuil 1,8 A, entre premiers voisins a 1,42 A
+   et seconds a 2,46 A), avec la convention d'image minimale. Elle est conservee ensuite : une liaison n'est
+   declaree rompue que si sa longueur depasse 2,0 A. */
+const BOND_CUT = 1.8, BREAK = 2.0;
+const BL = [], coordRef = new Uint8Array(N);
+let r0 = 0;
+(function () {
+  const p = positions(0), ly0 = B0[3] - B0[2];
+  for (let i = 0; i < N; i++) for (let j = i + 1; j < N; j++) {
+    let dx = p[3 * j] - p[3 * i], dy = p[3 * j + 1] - p[3 * i + 1]; const dz = p[3 * j + 2] - p[3 * i + 2];
+    dx -= lx0 * Math.round(dx / lx0); dy -= ly0 * Math.round(dy / ly0);
+    const d2 = dx * dx + dy * dy + dz * dz;
+    if (d2 < BOND_CUT * BOND_CUT) { BL.push(i, j); coordRef[i]++; coordRef[j]++; r0 += Math.sqrt(d2); }
+  }
+  r0 /= BL.length / 2;
+})();
+const NB = BL.length / 2;
+const cache = new Map();
+function frame(f) {
+  /* seg : par liaison [dx, dy, dz (image minimale), longueur, traverse-t-elle un bord ?] */
+  if (cache.has(f)) return cache.get(f);
+  const p = positions(f), b = T.boxes[f], lx = b[1] - b[0], ly = b[3] - b[2], seg = new Float32Array(5 * NB);
+  let broken = 0;
+  for (let k = 0; k < NB; k++) {
+    const i = BL[2 * k], j = BL[2 * k + 1];
+    let dx = p[3 * j] - p[3 * i], dy = p[3 * j + 1] - p[3 * i + 1]; const dz = p[3 * j + 2] - p[3 * i + 2];
+    const sx = Math.round(dx / lx), sy = Math.round(dy / ly);
+    dx -= lx * sx; dy -= ly * sy;
+    const len = Math.sqrt(dx * dx + dy * dy + dz * dz);
+    if (len > BREAK) broken++;
+    seg.set([dx, dy, dz, len, sx || sy ? 1 : 0], 5 * k);
+  }
+  const out = { p, seg, broken };
+  cache.set(f, out);
+  return out;
+}
+
+/* ---------- courbe ---------- */
+const C = D.curve, svg = $("chart"), NS = "http://www.w3.org/2000/svg";
+const M = { l: 46, r: 14, t: 12, b: 36 }, W = 420, H = 270;
+const xmax = Math.max(...C.strain) * 100, ymaxRaw = Math.max(...C.stress), yminData = Math.min(...C.stress),
+  yminRaw = yminData > -0.1 * ymaxRaw ? 0 : yminData;   /* un leger bruit sous zero n'ajoute pas une graduation negative */
+const niceStep = span => { const e = Math.pow(10, Math.floor(Math.log10(span / 4))); const m = span / 4 / e; return (m > 5 ? 10 : m > 2 ? 5 : m > 1 ? 2 : 1) * e; };
+const ys = niceStep(ymaxRaw - yminRaw), y0 = Math.floor(yminRaw / ys) * ys, y1 = Math.ceil(ymaxRaw / ys) * ys;
+const xs = niceStep(xmax), x1 = Math.ceil(xmax / xs - 1e-9) * xs;
+const X = v => M.l + (v / x1) * (W - M.l - M.r), Y = v => H - M.b - ((v - y0) / (y1 - y0)) * (H - M.t - M.b);
+const el = (tag, attrs, text) => { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (text != null) e.textContent = text; svg.appendChild(e); return e; };
+for (let v = y0; v <= y1 + 1e-9; v += ys) {
+  el("path", { class: v === 0 ? "axis" : "grid", d: `M${M.l} ${Y(v)}H${W - M.r}` });
+  el("text", { x: M.l - 8, y: Y(v) + 4, "text-anchor": "end" }, fr(v, ys < 1 ? 1 : 0));
+}
+for (let v = 0; v <= x1 + 1e-9; v += xs) el("text", { x: X(v), y: H - M.b + 16, "text-anchor": "middle" }, fr(v, xs < 1 ? 1 : 0));
+el("path", { class: "axis", d: `M${M.l} ${M.t}V${H - M.b}` });
+el("text", { x: (M.l + W - M.r) / 2, y: H - 4, "text-anchor": "middle" }, "strain (%)");
+el("text", { x: 12, y: (M.t + H - M.b) / 2, "text-anchor": "middle", transform: `rotate(-90 12 ${(M.t + H - M.b) / 2})` }, "stress (GPa)");
+el("path", { class: "sim", d: C.strain.map((s, i) => (i ? "L" : "M") + X(s * 100).toFixed(1) + " " + Y(C.stress[i]).toFixed(1)).join("") });
+el("path", { class: "fit", d: `M${X(0)} ${Y(C.intercept)}L${X(xmax)} ${Y(C.intercept + C.slope * xmax / 100)}` });
+const hair = el("path", { class: "hair", d: "", visibility: "hidden" });
+const cursor = el("circle", { class: "cursor", r: 5, cx: X(0), cy: Y(C.stress[0]) });
+function curveAt(strain) { let i = 0, best = 1e9; for (let k = 0; k < C.strain.length; k++) { const d = Math.abs(C.strain[k] - strain); if (d < best) { best = d; i = k; } } return i; }
+const tip = $("tip"), tipIdle = tip.textContent;
+svg.addEventListener("pointermove", e => {
+  const r = svg.getBoundingClientRect(), vx = (e.clientX - r.left) / r.width * W;
+  const s = Math.min(xmax, Math.max(0, (vx - M.l) / (W - M.l - M.r) * x1)) / 100, i = curveAt(s);
+  hair.setAttribute("d", `M${X(C.strain[i] * 100)} ${M.t}V${H - M.b}`); hair.setAttribute("visibility", "visible");
+  tip.textContent = "ε = " + fr(C.strain[i] * 100, 2) + "%   σ = " + fr(C.stress[i], 1) + " GPa   fit: " + fr(C.intercept + C.slope * C.strain[i], 1) + " GPa";
+});
+svg.addEventListener("pointerleave", () => { hair.setAttribute("visibility", "hidden"); tip.textContent = tipIdle; });
+
+/* ---------- lecture ---------- */
+const scrub = $("scrub"), playBtn = $("play");
+scrub.max = F - 1;
+let cur = 0, playing = false, acc = 0, last = 0, draw3d = () => {};
+function show(f) {
+  cur = f; scrub.value = f;
+  const s = strainOf(f), i = curveAt(s);
+  $("r-strain").textContent = fr(s * 100, 2) + "%";
+  $("r-stress").textContent = "σ = " + fr(C.stress[i], 1) + " GPa";
+  $("r-frame").textContent = "frame " + (f + 1) + " / " + F;
+  $("r-bonds").textContent = frame(f).broken + " of " + NB + " bonds broken (> " + BREAK.toFixed(1) + " Å)";
+  cursor.setAttribute("cx", X(C.strain[i] * 100)); cursor.setAttribute("cy", Y(C.stress[i]));
+  draw3d(f);
+}
+function setPlaying(on) { playing = on; playBtn.textContent = on ? "Pause" : "Play"; if (on) { last = performance.now(); requestAnimationFrame(tick); } }
+function tick(now) {
+  if (!playing) return;
+  acc += (now - last) / 1000 * Number($("speed").value); last = now;
+  if (acc >= 1) { const step = Math.floor(acc); acc -= step; show((cur + step) % F); }
+  requestAnimationFrame(tick);
+}
+playBtn.addEventListener("click", () => setPlaying(!playing));
+scrub.addEventListener("input", () => { setPlaying(false); show(Number(scrub.value)); });
+
+/* ---------- 3D ---------- */
+(function () {
+  const stage = $("stage"), canvas = $("gl");
+  let renderer;
+  try { if (!window.THREE) throw 0; renderer = new THREE.WebGLRenderer({ canvas, antialias: true }); }
+  catch (e) {
+    canvas.hidden = true;
+    stage.appendChild(Object.assign(document.createElement("div"), { className: "fallback",
+      textContent: "The 3D view could not start in this browser (WebGL unavailable). The measurements and the curve are unaffected." }));
+    return;
+  }
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  const scene = new THREE.Scene(), cam = new THREE.PerspectiveCamera(32, 16 / 10, 1, 5000);
+  cam.up.set(0, 0, 1);
+  scene.add(new THREE.HemisphereLight(0xffffff, 0x556070, 0.85));
+  const sun = new THREE.DirectionalLight(0xffffff, 0.7); sun.position.set(0.4, -0.6, 1); scene.add(sun);
+
+  const atoms = new THREE.InstancedMesh(new THREE.SphereGeometry(0.30, 14, 10), new THREE.MeshLambertMaterial(), N);
+  const maxBonds = 2 * NB + 4;
+  const bonds = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.15, 0.15, 1, 8, 1, true), new THREE.MeshLambertMaterial(), maxBonds);
+  atoms.frustumCulled = bonds.frustumCulled = false;
+  scene.add(atoms, bonds);
+  const rect = b => [b[0] - cx, b[2] - cy, 0, b[1] - cx, b[2] - cy, 0, b[1] - cx, b[3] - cy, 0, b[0] - cx, b[3] - cy, 0];
+  const mkBox = () => { const g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.Float32BufferAttribute(rect(B0), 3)); return g; };
+  const refBox = new THREE.LineLoop(mkBox(), new THREE.LineDashedMaterial({ dashSize: 1.2, gapSize: 0.9 }));
+  refBox.computeLineDistances();
+  const curBox = new THREE.LineLoop(mkBox(), new THREE.LineBasicMaterial());
+  scene.add(refBox, curBox);
+
+  const col = {}, tmp = new THREE.Color(), dummy = new THREE.Object3D(), up = new THREE.Vector3(0, 1, 0), dir = new THREE.Vector3();
+  function theme() {
+    for (const k of ["stage", "atom", "defect", "bond", "stretch", "compress", "muted", "accent"]) col[k] = new THREE.Color(css("--" + k));
+    renderer.setClearColor(col.stage, 1);
+    refBox.material.color.copy(col.muted); curBox.material.color.copy(col.accent);
+    for (let i = 0; i < N; i++) atoms.setColorAt(i, coordRef[i] < 3 ? col.defect : col.atom);
+    atoms.instanceColor.needsUpdate = true;
+    /* les couleurs d'instance doivent exister avant le premier rendu, sinon le shader est compile sans elles */
+    for (let k = 0; k < maxBonds; k++) bonds.setColorAt(k, col.bond);
+    bonds.instanceColor.needsUpdate = true;
+  }
+
+  draw3d = function (f) {
+    const { p, seg } = frame(f);
+    for (let i = 0; i < N; i++) { dummy.position.set(p[3 * i], p[3 * i + 1], p[3 * i + 2]); dummy.quaternion.identity(); dummy.scale.set(1, 1, 1); dummy.updateMatrix(); atoms.setMatrixAt(i, dummy.matrix); }
+    atoms.instanceMatrix.needsUpdate = true;
+    let n = 0;
+    const put = (x, y, z, len) => { dummy.position.set(x, y, z); dummy.scale.set(1, len, 1); dummy.updateMatrix(); bonds.setMatrixAt(n, dummy.matrix); bonds.setColorAt(n, tmp); n++; };
+    for (let k = 0; k < NB; k++) {
+      const i = BL[2 * k], j = BL[2 * k + 1], dx = seg[5 * k], dy = seg[5 * k + 1], dz = seg[5 * k + 2], len = seg[5 * k + 3];
+      if (len > BREAK) continue;                                   /* liaison rompue : non tracee */
+      dir.set(dx, dy, dz).divideScalar(len); dummy.quaternion.setFromUnitVectors(up, dir);
+      const t = Math.max(-1, Math.min(1, (len / r0 - 1) / 0.04));
+      tmp.copy(col.bond).lerp(t >= 0 ? col.stretch : col.compress, Math.abs(t));
+      if (!seg[5 * k + 4]) put(p[3 * i] + dx / 2, p[3 * i + 1] + dy / 2, p[3 * i + 2] + dz / 2, len);
+      else {                                                       /* a travers un bord periodique : deux demi-liaisons */
+        put(p[3 * i] + dx / 4, p[3 * i + 1] + dy / 4, p[3 * i + 2] + dz / 4, len / 2);
+        put(p[3 * j] - dx / 4, p[3 * j + 1] - dy / 4, p[3 * j + 2] - dz / 4, len / 2);
+      }
+    }
+    bonds.count = n; bonds.instanceMatrix.needsUpdate = true; bonds.instanceColor.needsUpdate = true;
+    curBox.geometry.attributes.position.array.set(rect(T.boxes[f])); curBox.geometry.attributes.position.needsUpdate = true;
+    render();
+  };
+
+  /* camera orbitale minimale : glisser pour tourner, molette pour zoomer */
+  const span = Math.max(lx0, B0[3] - B0[2]);
+  let az = Q.has("az") ? Number(Q.get("az")) : -0.55, pol = 0.95, dist = span * 2.35;
+  function render() {
+    cam.position.set(dist * Math.sin(pol) * Math.sin(az), -dist * Math.sin(pol) * Math.cos(az), dist * Math.cos(pol));
+    cam.lookAt(0, 0, 0); renderer.render(scene, cam);
+  }
+  let drag = null;
+  canvas.addEventListener("pointerdown", e => { drag = [e.clientX, e.clientY]; canvas.setPointerCapture(e.pointerId); });
+  canvas.addEventListener("pointermove", e => {
+    if (!drag) return;
+    az -= (e.clientX - drag[0]) * 0.008; pol = Math.max(0.02, Math.min(1.5, pol - (e.clientY - drag[1]) * 0.008));
+    drag = [e.clientX, e.clientY]; render();
+  });
+  canvas.addEventListener("pointerup", () => { drag = null; });
+  canvas.addEventListener("pointercancel", () => { drag = null; });
+  canvas.addEventListener("wheel", e => { e.preventDefault(); dist = Math.max(span * 0.5, Math.min(span * 6, dist * Math.exp(e.deltaY * 0.001))); render(); }, { passive: false });
+  $("view-top").addEventListener("click", () => { az = 0; pol = 0.02; dist = span * 2.1; render(); });
+  $("view-3d").addEventListener("click", () => { az = -0.55; pol = 0.95; dist = span * 2.35; render(); });
+
+  function resize() { const w = stage.clientWidth, h = stage.clientHeight; if (!w || !h) return; renderer.setSize(w, h, false); cam.aspect = w / h; cam.updateProjectionMatrix(); render(); }
+  new ResizeObserver(resize).observe(stage);
+  const retheme = () => { theme(); draw3d(cur); };
+  matchMedia("(prefers-color-scheme: dark)").addEventListener("change", retheme);
+  new MutationObserver(retheme).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+  theme(); resize();
+})();
+
+show(CAP ? Math.max(0, Math.min(F - 1, Number(Q.get("f")) || 0)) : 0);
+if (!CAP && !matchMedia("(prefers-reduced-motion: reduce)").matches) setPlaying(true);
+</script>
