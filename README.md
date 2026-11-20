@@ -1,100 +1,104 @@
 # graphene_agent (v0)
 
-Un agent LLM qui pilote LAMMPS sur une feuille de graphène : relaxation et traction
-uniaxiale (module de Young).
+An LLM agent that drives LAMMPS on a graphene sheet: relaxation and uniaxial tension
+(Young's modulus).
 
-## Principe : le LLM propose, le code vérifie
+Interactive 3D demo: https://hamdim99.github.io/nemotron-lammps/
 
-- Le modèle n'a accès qu'à 4 outils bornés : `build_structure`, `write_input`, `run`, `parse_log`.
-- Il n'écrit jamais d'input LAMMPS : il choisit des paramètres, le code génère le fichier.
-- Toute validation est déterministe : bornes codées (`BOUNDS`, `MAX_ATOMS`), LAMMPS
-  lui-même, puis contrôles de plausibilité physique (`PLAUSIBLE`).
-- Un run `full` est refusé tant qu'un run `smoke` (200 pas) n'a pas réussi sur le même input.
-- Chaque appel d'outil et la réponse finale sont journalisés dans `<workdir>/trace.jsonl`.
+## Principle: the LLM proposes, the code verifies
+
+- The model only has 4 bounded tools: `build_structure`, `write_input`, `run`, `parse_log`.
+- It never writes a LAMMPS input: it picks parameters, the code generates the file.
+- All validation is deterministic: hard-coded bounds (`BOUNDS`, `MAX_ATOMS`), LAMMPS itself,
+  then physical plausibility checks (`PLAUSIBLE`).
+- A `full` run is refused until a `smoke` run (200 steps) has succeeded on the same input.
+- Every tool call and the final answer are logged to `<workdir>/trace.jsonl`.
 
 ## Installation
 
-Python 3.10+ et LAMMPS avec le paquet MANYBODY (potentiels `BNC.tersoff`, `CH.airebo`).
+Python 3.10+ and LAMMPS with the MANYBODY package (`BNC.tersoff`, `CH.airebo` potentials).
 
-Linux / macOS :
+Linux / macOS:
 
     conda install -c conda-forge lammps
     pip install openai pytest
 
-Windows (conda-forge ne fournit pas LAMMPS pour win-64) :
+Windows (conda-forge does not ship LAMMPS for win-64):
 
     pip install lammps openai pytest
     winget install Microsoft.msmpi
 
-Le runtime Microsoft MPI est indispensable : sans `msmpi.dll`, `lmp.exe` quitte sans
-message (code 0xC0000135) et l'agent rapporte « aucune sortie thermo dans le log ».
+The Microsoft MPI runtime is required: without `msmpi.dll`, `lmp.exe` exits silently
+(code 0xC0000135) and the agent reports "aucune sortie thermo dans le log".
 
-Le fichier de potentiel est cherché dans `$LAMMPS_POTENTIALS`, dans le paquet Python
-`lammps`, à côté de l'exécutable `lmp`, puis dans le dossier courant.
+The potential file is searched in `$LAMMPS_POTENTIALS`, in the `lammps` Python package,
+next to the `lmp` executable, then in the current directory.
 
 ## Usage
 
-Pipeline déterministe, sans LLM (pour vérifier LAMMPS et les garde-fous) :
+Deterministic pipeline, no LLM (to check LAMMPS and the guardrails):
 
     python graphene_agent.py --spec spec.json
 
-Agent (API compatible OpenAI, endpoint NVIDIA par défaut) :
+Agent (OpenAI-compatible API, NVIDIA endpoint by default):
 
-    export NVIDIA_API_KEY=...        # PowerShell : $env:NVIDIA_API_KEY = "..."
+    export NVIDIA_API_KEY=...        # PowerShell: $env:NVIDIA_API_KEY = "..."
     python graphene_agent.py "module de Young d'une feuille 5x5 nm avec 1 % de lacunes à 300 K" --workdir runs/essai
 
-Variables optionnelles : `NEMOTRON_MODEL` (défaut `nvidia/nemotron-3.5-super-vl-120b-a12b`),
-`LLM_BASE_URL`. La clé ne doit figurer dans aucun fichier.
+Optional variables: `NEMOTRON_MODEL` (default `nvidia/nemotron-3.5-super-vl-120b-a12b`),
+`LLM_BASE_URL`. The key must never be written to a file.
 
-Fichiers produits dans le dossier de travail : `graphene.data`, `in.<mode>.lammps`,
-`log.<mode>.lammps`, `traj.<mode>.lammpstrj` (environ 100 images de la traction, pour
-la visualisation) et `trace.jsonl`.
+The system prompt, the tool messages and the test prompts are in French.
 
-Tests :
+Files written to the working directory: `graphene.data`, `in.<mode>.lammps`,
+`log.<mode>.lammps`, `traj.<mode>.lammpstrj` (about 100 frames of the pull, for
+visualisation) and `trace.jsonl`.
 
-    pytest             # garde-fous, parse_thermo, boucle agent avec faux modèle (quelques secondes)
-    pytest -m slow     # intégration LAMMPS réelle (~30 s)
+Tests:
 
-Interface 3D (three.js) d'un run de traction fait par l'agent, et vidéo :
+    pytest             # guardrails, parse_thermo, agent loop with a scripted fake model (a few seconds)
+    pytest -m slow     # real LAMMPS integration (~30 s)
 
-    python viewer/build_viewer.py runs/essai    # écrit viewer/graphene_viewer.html et docs/index.html (pages autonomes)
-    python viewer/make_video.py                 # écrit viewer/graphene_traction.mp4 (Edge/Chrome headless + imageio-ffmpeg)
+3D interface (three.js) of a tensile run made by the agent, and video:
 
-`docs/index.html` est la page à partager : sur GitHub, activer Pages (Settings > Pages, branche `main`,
-dossier `/docs`) la publie à l'adresse `https://<compte>.github.io/<dépôt>/`.
+    python viewer/build_viewer.py runs/essai    # writes viewer/graphene_viewer.html and docs/index.html (standalone pages)
+    python viewer/make_video.py                 # writes viewer/graphene_traction.mp4 (headless Edge/Chrome + imageio-ffmpeg)
 
-Banc d'essai (30 cas dans `bench/cases.json`, juge déterministe sur `trace.jsonl`) :
+`docs/index.html` is the page to share: on GitHub, enabling Pages (Settings > Pages, branch `main`,
+folder `/docs`) publishes it at `https://<account>.github.io/<repo>/`.
 
-    python bench/run_bench.py                   # reprend là où il s'est arrêté ; attend et réessaie sur les 429
-    python bench/run_bench.py --judge-only      # rejuge les traces existantes sans appeler le modèle
+Benchmark (30 cases in `bench/cases.json`, deterministic judge reading `trace.jsonl`):
 
-Sorties : `bench/results.csv`, `bench/summary.txt`, `bench/runs/<id>/`.
+    python bench/run_bench.py                   # resumes where it stopped; waits and retries on 429
+    python bench/run_bench.py --judge-only      # re-judges existing traces without calling the model
 
-## Résultats de référence
+Outputs: `bench/results.csv`, `bench/summary.txt`, `bench/runs/<id>/`.
+
+## Reference results
 
 Tersoff (`BNC.tersoff`), 300 K, LAMMPS 22Jul2025.
 
-| Cas | Paramètres | Module de Young | Origine |
+| Case | Parameters | Young's modulus | Source |
 |---|---|---|---|
-| 5x5 nm sans défaut | dt 1 fs, 3000 pas d'équilibration, 0,005 /ps, déformation max 2 % | 0,956 TPa (R² 0,996) | `--spec`, rejoué sur Windows (Update 4) |
-| 5x5 nm, 2 % de lacunes | mêmes paramètres | 0,798 TPa | validation initiale, non rejouée ici |
-| 5x5 nm, 1 % de lacunes, graine 42 | dt 0,1 fs, 10 000 pas, 0,01 /ps, déformation max 5 % (choisis par le modèle) | 0,825 TPa (R² 0,999) | agent réel Nemotron |
+| 5x5 nm, pristine | dt 1 fs, 3000 equilibration steps, 0.005 /ps, max strain 2 % | 0.956 TPa (R² 0.996) | `--spec`, re-run on Windows (Update 4) |
+| 5x5 nm, 2 % vacancies | same parameters | 0.798 TPa | initial validation, not re-run here |
+| 5x5 nm, 1 % vacancies, seed 42 | dt 0.1 fs, 10,000 steps, 0.01 /ps, max strain 5 % (chosen by the model) | 0.825 TPa (R² 0.999) | real Nemotron agent |
 
-Repère expérimental : E ≈ 1,0 TPa pour le graphène sans défaut, a ≈ 2,46 Å. Tersoff
-donne ici a = 2,492 Å.
+Experimental reference: E ≈ 1.0 TPa for pristine graphene, a ≈ 2.46 Å. Tersoff gives
+a = 2.492 Å here.
 
-## Limites
+## Limitations
 
-- **Potentiel classique** (Tersoff ou AIREBO) : les valeurs dépendent du potentiel et ne
-  valent pas un calcul ab initio. L'épaisseur conventionnelle de 3,35 Å entre dans la contrainte.
-- **Pas de propriétés électroniques** : gap, structure de bandes, dopage électronique sont
-  hors de portée ; l'agent doit le dire sans avancer de chiffre.
-- **Pas de conductivité thermique** dans le v0.
-- **Régime linéaire seulement** : la déformation est bornée à 5 %, il n'y a donc ni
-  résistance à la rupture ni rupture simulée.
-- La plage de plausibilité du module de Young ne s'applique qu'aux feuilles sans défaut ;
-  avec des lacunes, seul le R² de l'ajustement est contrôlé.
-- Vitesses de déformation de dynamique moléculaire (10⁻⁴ à 10⁻² /ps), très supérieures à
-  l'expérience ; feuilles de 1 à 20 nm, 20 000 atomes au plus, un seul tirage de lacunes par graine.
-- Le modèle choisit librement les paramètres non précisés, dans les bornes : lire les
-  hypothèses de la réponse et `trace.jsonl` plutôt que le chiffre seul.
+- **Classical potential** (Tersoff or AIREBO): values depend on the potential and are not
+  a substitute for an ab initio calculation. The conventional 3.35 Å thickness enters the stress.
+- **No electronic properties**: band gap, band structure and electronic doping are out of
+  reach; the agent must say so without giving a number.
+- **No thermal conductivity** in v0.
+- **Linear regime only**: strain is capped at 5 %, so there is no fracture strength and no
+  simulated fracture.
+- The plausibility range for Young's modulus only applies to pristine sheets; with
+  vacancies, only the R² of the fit is checked.
+- Molecular-dynamics strain rates (10⁻⁴ to 10⁻² /ps), far above experiment; sheets of 1 to
+  20 nm, 20,000 atoms at most, a single vacancy draw per seed.
+- The model freely chooses any unspecified parameter within the bounds: read the
+  assumptions in the answer and `trace.jsonl` rather than the number alone.
