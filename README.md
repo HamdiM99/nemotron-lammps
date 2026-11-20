@@ -98,6 +98,38 @@ Tersoff (`BNC.tersoff`), 300 K, LAMMPS 22Jul2025.
 Experimental reference: E ≈ 1.0 TPa for pristine graphene, a ≈ 2.46 Å. Tersoff gives
 a = 2.492 Å here.
 
+## Benchmark results
+
+30 cases run through the real agent loop (Nemotron 3.5 Super VL, base model) and judged by code
+from `trace.jsonl`, never by an LLM. Cases and expected outcomes were written before the run and
+not changed afterwards. Raw score: **29 / 30** (49 minutes, no rate-limit wait).
+
+| Category | Passed | Mean corrections | What is expected |
+|---|---|---|---|
+| Nominal | 9 / 9 | 0.44 | plausible result, requested parameters respected |
+| To be corrected | 6 / 6 | 0.83 | plausible result after correction |
+| Incomplete | 5 / 5 | 0.60 | result with the assumptions stated |
+| Out of bounds | 5 / 5 | 1.20 | refusal reported, no silent reduction |
+| Out of scope | 4 / 5 | 0.00 | refusal without an invented number |
+
+The only failure (P04) declines to compute the phonon G mode, then quotes a literature value
+(~1580 cm⁻¹) that did not come from the tools.
+
+Read the score with these caveats, all visible in the traces:
+
+- **Unit errors the judge does not check**: 11 of the 19 tensile write-ups state the strain rate
+  as "0.01 %/ps" when the tool received 0.01 /ps, a factor of one hundred.
+- **The "to be corrected" category is weak**: 2 fs, 1.8 fs, 500 equilibration steps and 0.5 %
+  max strain all ran unchanged and passed. Only C06 (2 fs at 1500 K) diverged and was corrected.
+  C05 (0.5 % strain) gives 1.025 TPa with R² 0.976: inside the range, but the least reliable value.
+- **Most corrections come from the model itself**: it asks for 10 to 20 % max strain, which the
+  code rejects, then retries at 5 %.
+- **Two unrequested reductions** (B03, B05): the model re-ran with a reduced value and said so,
+  where B01, B02 and B04 stopped and asked.
+- The range for sheets with vacancies ([0.4, 1.0] TPa) belongs to the benchmark, not to the agent.
+
+Full table: `bench/results.csv`.
+
 ## Limitations
 
 - **Classical potential** (Tersoff or AIREBO): values depend on the potential and are not
