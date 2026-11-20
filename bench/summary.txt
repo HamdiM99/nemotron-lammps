@@ -1,0 +1,9 @@
+GLOBAL           29/30  ( 96.7 %)   corrections moyennes 0.60   [30/30 cas executes]
+nominal           9/ 9  (100.0 %)   corrections moyennes 0.44
+a_corriger        6/ 6  (100.0 %)   corrections moyennes 0.83
+incomplet         5/ 5  (100.0 %)   corrections moyennes 0.60
+hors_bornes       5/ 5  (100.0 %)   corrections moyennes 1.20
+hors_perimetre    4/ 5  ( 80.0 %)   corrections moyennes 0.00
+
+Echecs :
+  P04 : chiffre hors perimetre - chiffre donne : '1580 cm⁻¹'
