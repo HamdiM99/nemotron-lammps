@@ -1,7 +1,18 @@
 # graphene_agent (v0)
 
+![LLM: NVIDIA Nemotron](https://img.shields.io/badge/LLM-NVIDIA%20Nemotron-76B900?logo=nvidia&logoColor=white)
+![Solver: LAMMPS 22Jul2025](https://img.shields.io/badge/solver-LAMMPS%2022Jul2025-1463C6)
+![Force field: Tersoff | AIREBO](https://img.shields.io/badge/force%20field-Tersoff%20%7C%20AIREBO-5A6777)
+![Material: graphene](https://img.shields.io/badge/material-graphene-16202B)
+![API: OpenAI-compatible](https://img.shields.io/badge/API-OpenAI--compatible-412991?logo=openai&logoColor=white)
+![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-3776AB?logo=python&logoColor=white)
+![Viewer: three.js](https://img.shields.io/badge/viewer-three.js-000000?logo=threedotjs&logoColor=white)
+![Tests: pytest](https://img.shields.io/badge/tests-pytest-0A9EDC?logo=pytest&logoColor=white)
+
 An LLM agent that drives LAMMPS on a graphene sheet: relaxation and uniaxial tension
 (Young's modulus).
+
+[![3D demo: a 5x5 nm graphene sheet with 1 % vacancies under tension, with the measured Young's modulus, the stress-strain curve and the agent's tool calls](docs/demo.png)](https://hamdim99.github.io/nemotron-lammps/)
 
 Interactive 3D demo: https://hamdim99.github.io/nemotron-lammps/
 
