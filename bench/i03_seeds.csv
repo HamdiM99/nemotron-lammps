@@ -1,0 +1,7 @@
+﻿graine,max_strain,ok,E_parse_log_TPa,R2_parse_log,E_fenetre_2pct_TPa,R2_fenetre_2pct,points_2pct,avertissements
+42,0.02,True,0.467,0.899,0.467,0.899,800,ajustement lineaire mediocre (R2=0.90) : bruit thermique eleve ou sortie du regime lineaire
+42,0.05,True,0.561,0.991,0.478,0.899,800,
+1,0.05,True,0.628,0.998,0.638,0.984,800,
+2,0.05,True,0.605,0.997,0.574,0.972,801,
+3,0.05,True,0.617,0.997,0.576,0.969,800,
+4,0.05,True,0.608,0.996,0.551,0.961,801,

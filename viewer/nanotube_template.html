@@ -1,0 +1,414 @@
+<title>Nanotube Shuttle Lab</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@500;600&display=swap">
+<style>
+/* Mise en page : meme banc que la page de traction. Les deux navettes en 3D a gauche, les grandeurs
+   electromecaniques a droite, une grille de courbes en dessous, puis la methode et la portee. */
+:root {
+  --bg: #F2F4F7; --surface: #FFFFFF; --stage: #E6EAF0; --ink: #16202B; --muted: #5A6777; --line: #D3DAE3;
+  --accent: #1463C6; --pos: #D9542B; --neg: #2B7FD9; --bond: #8A95A2; --wall: #6B7785; --band: #E8EDF4;
+  --good: #1F7A4D; --bad: #B3261E;
+  --display: "Space Grotesk", "Segoe UI", system-ui, sans-serif;
+  --body: "Inter", "Segoe UI", system-ui, sans-serif;
+  --mono: "JetBrains Mono", "Cascadia Mono", Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0B1016; --surface: #121A23; --stage: #080C11; --ink: #E6ECF2; --muted: #8E9BAB; --line: #243140;
+  --accent: #5AA9FF; --pos: #FF7A4D; --neg: #4DA3FF; --bond: #6F7C8A; --wall: #7C8896; --band: #1A2633;
+  --good: #4CC38A; --bad: #FF7B72; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #0B1016; --surface: #121A23; --stage: #080C11; --ink: #E6ECF2; --muted: #8E9BAB; --line: #243140;
+  --accent: #5AA9FF; --pos: #FF7A4D; --neg: #4DA3FF; --bond: #6F7C8A; --wall: #7C8896; --band: #1A2633;
+  --good: #4CC38A; --bad: #FF7B72; color-scheme: dark }
+
+*, *::before, *::after { box-sizing: border-box }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.55 var(--body) }
+.wrap { max-width: 1240px; margin: 0 auto; padding-block: 28px 48px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: flex; flex-direction: column; gap: 22px }
+h1, h2 { font-family: var(--display); font-weight: 600; margin: 0; text-wrap: balance }
+h1 { font-size: clamp(1.5rem, 3.2vw, 2.1rem); letter-spacing: -0.01em; line-height: 1.15 }
+h2 { font-size: 1rem }
+p { margin: 0 }
+.eyebrow { font: 500 0.72rem var(--mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted) }
+.mono { font-family: var(--mono); font-variant-numeric: tabular-nums }
+.muted { color: var(--muted) }
+header { display: flex; flex-direction: column; gap: 10px }
+.lede { max-width: 70ch; color: var(--muted) }
+.lede b { color: var(--ink); font-weight: 600 }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; min-width: 0 }
+
+.bench { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: 22px; align-items: start }
+@media (max-width: 900px) { .bench { grid-template-columns: minmax(0, 1fr) } }
+.stage { position: relative; background: var(--stage); border-radius: 10px 10px 0 0; aspect-ratio: 16 / 9; max-width: 100%; overflow: hidden }
+.stage canvas { display: block; width: 100%; height: 100%; touch-action: none; cursor: grab }
+.stage canvas:active { cursor: grabbing }
+.readout { position: absolute; top: 12px; left: 14px; display: flex; flex-direction: column; gap: 2px; pointer-events: none }
+.readout .big { font: 500 1.5rem/1.1 var(--mono); font-variant-numeric: tabular-nums }
+.fallback { position: absolute; inset: 0; display: grid; place-items: center; padding: 24px; text-align: center; color: var(--muted) }
+.legend3d { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 22px; padding: 10px 14px;
+  font-size: 0.75rem; color: var(--muted); border-bottom: 1px solid var(--line) }
+.scale { display: inline-flex; align-items: center; gap: 8px; font-family: var(--mono) }
+.ramp { width: 110px; height: 6px; border-radius: 3px; background: linear-gradient(90deg, var(--neg), var(--bond), var(--pos)) }
+.key { display: inline-flex; align-items: center; gap: 6px }
+.dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block }
+.transport { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; padding: 12px 14px }
+.transport input[type=range] { flex: 1 1 180px; min-width: 0; accent-color: var(--accent) }
+button, select { font: 500 0.82rem var(--body); color: var(--ink); background: var(--surface); border: 1px solid var(--line);
+  border-radius: 7px; padding: 6px 12px; cursor: pointer }
+button:hover, select:hover { border-color: var(--muted) }
+button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px }
+button.primary { background: var(--accent); border-color: var(--accent); color: var(--surface); min-width: 86px }
+
+.side { display: flex; flex-direction: column; gap: 22px; min-width: 0 }
+.card { padding: 18px; display: flex; flex-direction: column; gap: 12px }
+.hero { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap }
+.hero .value { font: 600 2.6rem/1 var(--display); font-variant-numeric: tabular-nums }
+.hero .unit { font: 500 1.1rem var(--display); color: var(--muted) }
+.note { font-size: 0.8rem; color: var(--muted) }
+dl.facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 16px; margin: 0 }
+dl.facts dt { font-size: 0.72rem; color: var(--muted) }
+dl.facts dd { margin: 0; font: 500 0.9rem var(--mono); font-variant-numeric: tabular-nums; overflow-wrap: anywhere }
+.status { display: inline-flex; align-items: center; gap: 6px; font-size: 0.8rem }
+.status.ok { color: var(--good) } .status.warn { color: var(--bad) }
+
+.charts { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 330px), 1fr)); gap: 22px }
+.chart { padding: 16px 16px 10px; display: flex; flex-direction: column; gap: 6px }
+.chart svg { display: block; width: 100%; height: auto; overflow: visible }
+.chart text { font: 10.5px var(--mono); fill: var(--muted) }
+.chart .axis { stroke: var(--line); stroke-width: 1; fill: none }
+.chart .grid { stroke: var(--line); stroke-width: 1; stroke-dasharray: 2 4; fill: none }
+.chart .s1 { stroke: var(--accent); stroke-width: 2; fill: none; stroke-linejoin: round }
+.chart .s2 { stroke: var(--pos); stroke-width: 2; fill: none; stroke-linejoin: round }
+.chart .s3 { stroke: var(--ink); stroke-width: 1.5; stroke-dasharray: 6 4; fill: none }
+.chart .m1 { fill: var(--accent); stroke: var(--surface); stroke-width: 2 }
+.chart .bandr { fill: var(--band); stroke: none }
+.chart .hair { stroke: var(--muted); stroke-width: 1; fill: none }
+.chart-legend { display: flex; flex-wrap: wrap; gap: 2px 14px; font-size: 0.74rem; color: var(--muted); min-height: 1.2em }
+.sw { display: inline-block; width: 16px; height: 0; border-top: 2px solid var(--accent); vertical-align: middle; margin-right: 5px }
+.sw.s2 { border-top-color: var(--pos) } .sw.s3 { border-top: 2px dashed var(--ink) }
+.sw.band { height: 9px; border: 0; background: var(--band); border-radius: 2px }
+.tip { font: 0.74rem var(--mono); color: var(--muted); min-height: 1.3em; font-variant-numeric: tabular-nums }
+.cap { font-size: 0.78rem; color: var(--muted) }
+
+.lower { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 22px; align-items: start }
+@media (max-width: 900px) { .lower { grid-template-columns: minmax(0, 1fr) } }
+.block { padding: 18px; display: flex; flex-direction: column; gap: 12px }
+.block ul { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px }
+.block li { max-width: 68ch }
+footer { font-size: 0.78rem; color: var(--muted) }
+.capture .charts, .capture .lower, .capture footer, .capture .transport button, .capture .transport select { display: none }
+</style>
+
+<div class="wrap">
+  <header>
+    <span class="eyebrow">Molecular dynamics and electrostatics · reduced-size model</span>
+    <h1>Two head-to-head nanotube shuttles, pulled together by a voltage</h1>
+    <p class="lede">After <b>M. Hamdi et al., “Rotary Nanomotors Based on Head-to-head Nanotube Shuttles”, ICRA 2010</b>.
+      Same mechanism at PC scale: two <span id="h-tube"></span> double-wall tubes, <span id="h-len"></span> nm long.
+      This is a reduced model, not a reproduction of the paper.</p>
+  </header>
+
+  <section class="bench">
+    <div class="panel">
+      <div class="stage" id="stage">
+        <canvas id="gl" aria-label="3D view of the two nanotube shuttles closing under voltage"></canvas>
+        <div class="readout">
+          <span class="eyebrow">Gap between the two cores</span>
+          <span class="big" id="r-gap">–</span>
+          <span class="mono muted" id="r-time"></span>
+          <span class="mono muted" id="r-rot"></span>
+        </div>
+      </div>
+      <div class="legend3d">
+        <span class="scale">charge on core atoms <span>−</span><span class="ramp"></span><span>+</span></span>
+        <span class="key"><span class="dot" style="background: var(--wall); opacity: .45"></span>outer walls, held fixed</span>
+        <span id="l-volt" class="mono"></span>
+      </div>
+      <div class="transport">
+        <button class="primary" id="play" type="button">Play</button>
+        <input type="range" id="scrub" min="0" max="0" value="0" step="1" aria-label="Trajectory frame">
+        <span class="mono muted" id="r-frame"></span>
+        <select id="speed" aria-label="Playback speed">
+          <option value="8">Slow</option><option value="20" selected>Normal</option><option value="45">Fast</option>
+        </select>
+        <button id="view-side" type="button">Side view</button>
+        <button id="view-axis" type="button">Along the axis</button>
+      </div>
+    </div>
+
+    <div class="side">
+      <div class="panel card">
+        <span class="eyebrow">Pull-in voltage, this model</span>
+        <div class="hero"><span class="value" id="v-thr">–</span><span class="unit">V</span></div>
+        <p class="note" id="v-note"></p>
+        <span class="status" id="status"></span>
+      </div>
+      <div class="panel card">
+        <span class="eyebrow">Electromechanical properties</span>
+        <dl class="facts" id="facts"></dl>
+      </div>
+    </div>
+  </section>
+
+  <section class="charts" id="charts"></section>
+
+  <section class="lower">
+    <div class="panel block">
+      <span class="eyebrow">Method</span>
+      <h2>How each number was obtained</h2>
+      <ul>
+        <li><b>Interlayer barriers and retraction force</b>: rigid shells, AIREBO with its Lennard-Jones term; the core is moved step by step and LAMMPS returns the energy.</li>
+        <li><b>Charges</b>: every atom of a tube sits at the same potential; the code solves the linear system for Gaussian charges on the atoms (atomistic moment method).</li>
+        <li><b>Electrostatic force and pull-in voltage</b>: Coulomb force on one core from all other charges; the threshold is where it exceeds the van der Waals retraction force. It scales with the square of the voltage.</li>
+        <li><b>Telescoping oscillator</b>: the core is pulled out and released; the measured frequency is checked against the estimate from the retraction force.</li>
+        <li><b>Closing run</b>: both shuttles under voltage, charges kept fixed, outer walls held; the code tracks the gap and the rotation of each core.</li>
+      </ul>
+    </div>
+    <div class="panel block">
+      <span class="eyebrow">Scope</span>
+      <h2>What this model does not show</h2>
+      <ul>
+        <li>Two walls and <span id="s-len"></span> nm instead of ten walls and 200 nm: far less charge, so the pull-in voltage here is much higher than the ~5 V of the paper.</li>
+        <li>The field needed at this size is beyond what a real device would sustain. Read the trend, not the value.</li>
+        <li>Charges are computed once and kept fixed during the dynamics; outer walls do not move.</li>
+        <li>A short run on small tubes neither confirms nor refutes the rotation reported in the paper.</li>
+        <li>Open tube ends are reactive with this potential: the cores can bond when they touch.</li>
+      </ul>
+    </div>
+  </section>
+  <footer>Computed with LAMMPS (AIREBO) and a NumPy charge solver. Mustapha Hamdi · <span class="mono">mustapha.hamdi@innodeep.net</span></footer>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+const D = /*__DATA__*/null;
+const $ = id => document.getElementById(id);
+const Q = new URLSearchParams(location.search), CAP = Q.has("capture");
+if (CAP) document.body.classList.add("capture");
+const fx = (v, d) => v == null ? "–" : Number(v).toLocaleString("en-US", { minimumFractionDigits: d, maximumFractionDigits: d });
+const css = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+const R = D.results, S = R.static || {}, C = R.charges || {}, F = R.force || { gaps: [] }, O = R.oscillator || {}, K = R.close || {};
+
+/* ---------- textes ---------- */
+$("h-tube").textContent = "(" + S.n_inner + "," + S.n_inner + ")@(" + S.n_outer + "," + S.n_outer + ")";
+$("h-len").textContent = fx(S.length_nm, 1);
+$("s-len").textContent = fx(S.length_nm, 1);
+const demoGap = K.gap_A || (F.gaps[0] || {}).gap_A;
+const demo = F.gaps.find(g => g.gap_A === demoGap) || F.gaps[0] || {};
+$("v-thr").textContent = fx(demo.threshold_V, 1);
+$("v-note").textContent = "Voltage at which the electrostatic pull on a core exceeds the van der Waals retraction force, for a "
+  + fx(demoGap / 10, 1) + " nm gap. The paper reports contact at about 5 V for 200 nm, ten-wall segments.";
+const st = $("status"), warns = R.warnings || [];
+if (warns.length) { st.className = "status warn"; st.textContent = "⚠ " + warns.join(" · "); }
+else { st.className = "status ok"; st.textContent = "✓ Plausibility checks passed"; }
+const facts = [
+  ["Retraction force (van der Waals)", fx(S.retraction_force_nN, 2) + " nN"],
+  ["Interlayer adhesion", fx(S.adhesion_J_m2, 2) + " J/m²"],
+  ["Sliding barrier", fx(S.slide_barrier_meV_per_atom * 1000, 0) + " µeV/atom"],
+  ["Rotation barrier", fx(S.rotate_barrier_meV_per_atom * 1000, 0) + " µeV/atom"],
+  ["Capacitance of one tube", fx(C.capacitance_aF * 1000, 0) + " zF"],
+  ["Charge per atom at " + fx(C.voltage_V, 0) + " V", fx(C.q_cell_min_e * 1000, 1) + " to " + fx(C.q_cell_max_e * 1000, 1) + " ×10⁻³ e"],
+  ["Electrostatic pull at contact", fx((demo.scan || []).length ? demo.scan[demo.scan.length - 1].force_nN_per_V2 * 1000 : null, 1) + " pN/V²"],
+  ["Oscillation, measured", O.frequency_GHz ? fx(O.frequency_GHz, 1) + " GHz" : "–"],
+  ["Oscillation, estimated", O.analytic_frequency_GHz ? fx(O.analytic_frequency_GHz, 1) + " GHz" : "–"],
+  ["Closing run", K.ok ? fx(K.voltage_V, 1) + " V, " + fx(K.temperature_K, 0) + " K" : "–"],
+  ["Cores in contact after", K.contact_time_ps != null ? fx(K.contact_time_ps, 1) + " ps" : "no contact"],
+  ["Core rotation at the end", K.ok ? fx(K.rotation_L_deg[K.rotation_L_deg.length - 1], 1) + "° / " + fx(K.rotation_R_deg[K.rotation_R_deg.length - 1], 1) + "°" : "–"],
+];
+for (const [k, v] of facts) {
+  const d = document.createElement("div");
+  d.appendChild(Object.assign(document.createElement("dt"), { textContent: k }));
+  d.appendChild(Object.assign(document.createElement("dd"), { textContent: v }));
+  $("facts").appendChild(d);
+}
+
+/* ---------- courbes ---------- */
+const NS = "http://www.w3.org/2000/svg";
+function chart(o) {
+  const panel = document.createElement("div"); panel.className = "panel chart";
+  panel.appendChild(Object.assign(document.createElement("h2"), { textContent: o.title }));
+  const lg = document.createElement("div"); lg.className = "chart-legend";
+  if (o.series.length > 1 || o.band) for (const s of o.series) {
+    const e = document.createElement("span"); e.appendChild(Object.assign(document.createElement("span"), { className: "sw " + s.cls })); e.append(s.name); lg.appendChild(e);
+  }
+  if (o.band) { const e = document.createElement("span"); e.appendChild(Object.assign(document.createElement("span"), { className: "sw band" })); e.append(o.band.name); lg.appendChild(e); }
+  panel.appendChild(lg);
+  const svg = document.createElementNS(NS, "svg"), W = 380, H = 232, M = { l: 52, r: 12, t: 8, b: 36 };
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`); svg.setAttribute("role", "img"); svg.setAttribute("aria-label", o.title);
+  panel.appendChild(svg);
+  const tip = Object.assign(document.createElement("div"), { className: "tip", textContent: o.caption || "" }); panel.appendChild(tip);
+  $("charts").appendChild(panel);
+  const xsAll = o.series.flatMap(s => s.x), ysAll = o.series.flatMap(s => s.y).concat(o.band ? [o.band.y0, o.band.y1] : []);
+  const nice = (a, b) => { const span = (b - a) || 1, e = Math.pow(10, Math.floor(Math.log10(span / 4))), m = span / 4 / e, st = (m > 5 ? 10 : m > 2 ? 5 : m > 1 ? 2 : 1) * e; return [Math.floor(a / st + 1e-9) * st, Math.ceil(b / st - 1e-9) * st, st]; };
+  const [xa, xb, xst] = nice(Math.min(...xsAll), Math.max(...xsAll));
+  const [ya, yb, yst] = nice(Math.min(...ysAll, o.yzero ? 0 : Infinity), Math.max(...ysAll));
+  const X = v => M.l + (v - xa) / (xb - xa) * (W - M.l - M.r), Y = v => H - M.b - (v - ya) / (yb - ya) * (H - M.t - M.b);
+  const dec = st => Math.min(4, Math.max(0, -Math.floor(Math.log10(st) + 1e-9)));
+  const el = (tag, attrs, text) => { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (text != null) e.textContent = text; svg.appendChild(e); return e; };
+  if (o.band) el("rect", { class: "bandr", x: M.l, y: Y(o.band.y1), width: W - M.l - M.r, height: Y(o.band.y0) - Y(o.band.y1) });
+  for (let v = ya; v <= yb + yst * 1e-6; v += yst) { el("path", { class: Math.abs(v) < yst * 1e-6 ? "axis" : "grid", d: `M${M.l} ${Y(v)}H${W - M.r}` }); el("text", { x: M.l - 7, y: Y(v) + 3.5, "text-anchor": "end" }, fx(v, dec(yst))); }
+  for (let v = xa; v <= xb + xst * 1e-6; v += xst) el("text", { x: X(v), y: H - M.b + 15, "text-anchor": "middle" }, fx(v, dec(xst)));
+  el("path", { class: "axis", d: `M${M.l} ${M.t}V${H - M.b}H${W - M.r}` });
+  el("text", { x: (M.l + W - M.r) / 2, y: H - 4, "text-anchor": "middle" }, o.xl);
+  el("text", { x: 11, y: (M.t + H - M.b) / 2, "text-anchor": "middle", transform: `rotate(-90 11 ${(M.t + H - M.b) / 2})` }, o.yl);
+  for (const s of o.series) {
+    el("path", { class: s.cls, d: s.x.map((x, i) => (i ? "L" : "M") + X(x).toFixed(1) + " " + Y(s.y[i]).toFixed(1)).join("") });
+    if (s.markers) s.x.forEach((x, i) => el("circle", { class: "m1", r: 4, cx: X(x), cy: Y(s.y[i]) }));
+  }
+  const hair = el("path", { class: "hair", d: "", visibility: "hidden" });
+  svg.addEventListener("pointermove", e => {
+    const r = svg.getBoundingClientRect(), xv = xa + ((e.clientX - r.left) / r.width * W - M.l) / (W - M.l - M.r) * (xb - xa);
+    const near = s => s.x.reduce((b, x, i) => Math.abs(x - xv) < Math.abs(s.x[b] - xv) ? i : b, 0);
+    const i0 = near(o.series[0]);
+    hair.setAttribute("d", `M${X(o.series[0].x[i0])} ${M.t}V${H - M.b}`); hair.setAttribute("visibility", "visible");
+    tip.textContent = o.xs + " " + fx(o.series[0].x[i0], o.xd) + "   " + o.series.map(s => s.name + " " + fx(s.y[near(s)], o.yd)).join("   ");
+  });
+  svg.addEventListener("pointerleave", () => { hair.setAttribute("visibility", "hidden"); tip.textContent = o.caption || ""; });
+}
+if (C.q_cell_e) chart({ title: "Charge along an isolated tube at " + fx(C.voltage_V, 0) + " V", xl: "axial position (nm)", yl: "charge per atom (10⁻³ e)", xs: "z", xd: 2, yd: 1, yzero: true,
+  series: [{ name: "this model", cls: "s1", x: C.z_cell_nm, y: C.q_cell_e.map(v => v * 1000) }],
+  band: { y0: 5, y1: 34, name: "range in the paper, Fig. 2(a)" }, caption: "Charge piles up at the open ends, as in the paper." });
+if (F.gaps.length) chart({ title: "Pull-in voltage against the gap", xl: "gap between the shuttles (nm)", yl: "pull-in voltage (V)", xs: "gap", xd: 1, yd: 1, yzero: true,
+  series: [{ name: "threshold", cls: "s1", markers: true, x: F.gaps.map(g => g.gap_A / 10), y: F.gaps.map(g => g.threshold_V) }],
+  caption: "Wider gap, weaker pull: the voltage needed grows." });
+if (demo.scan) chart({ title: "Electrostatic pull as the cores approach", xl: "distance between core ends (Å)", yl: "force (pN per V²)", xs: "gap", xd: 1, yd: 2, yzero: true,
+  series: [{ name: "force", cls: "s1", x: demo.scan.map(p => p.end_gap_A).reverse(), y: demo.scan.map(p => p.force_nN_per_V2 * 1000).reverse() }],
+  caption: "For a " + fx(demoGap / 10, 1) + " nm gap. Multiply by V² for a given voltage." });
+if (S.slide) { const ns = Math.round((S.slide.shift_A.length - 1) / 2), nr = 18;
+  chart({ title: "Corrugation between the two walls", xl: "fraction of one period", yl: "energy (µeV per atom)", xs: "phase", xd: 2, yd: 1, yzero: true,
+  series: [{ name: "sliding", cls: "s1", x: S.slide.shift_A.slice(0, ns + 1).map((v, i) => i / ns), y: S.slide.meV_per_atom.slice(0, ns + 1).map(v => v * 1000) },
+           { name: "rotation", cls: "s2", x: S.rotate.angle_deg.slice(0, nr + 1).map(v => v / nr), y: S.rotate.meV_per_atom.slice(0, nr + 1).map(v => v * 1000) }],
+  caption: "Sliding period 1.23 Å, rotation period 18°. Nearly frictionless bearing." }); }
+if (S.pull) { const s = S.pull.extraction_A, e = S.pull.energy_eV, k = S.retraction_force_nN / 1.602177;
+  const sel = s.map((v, i) => i).filter(i => s[i] >= 5 && s[i] <= 20), b = sel.reduce((a, i) => a + e[i] - k * s[i], 0) / sel.length;
+  chart({ title: "Pulling the core out of its wall", xl: "extraction (Å)", yl: "energy (eV)", xs: "s", xd: 0, yd: 2, yzero: true,
+  series: [{ name: "energy", cls: "s1", x: s, y: e }, { name: "linear fit", cls: "s3", x: [0, s[s.length - 1]], y: [b, b + k * s[s.length - 1]] }],
+  caption: "Constant slope = constant retraction force, " + fx(S.retraction_force_nN, 2) + " nN." }); }
+if (O.z_A) chart({ title: "Telescoping oscillator", xl: "time (ps)", yl: "core displacement (Å)", xs: "t", xd: 1, yd: 1,
+  series: [{ name: "displacement", cls: "s1", x: O.time_ps, y: O.z_A }],
+  caption: O.frequency_GHz ? "Measured " + fx(O.frequency_GHz, 1) + " GHz, estimated " + fx(O.analytic_frequency_GHz, 1) + " GHz from the retraction force." : "" });
+if (K.end_gap_A) chart({ title: "Closing under voltage", xl: "time (ps)", yl: "gap between core ends (Å)", xs: "t", xd: 1, yd: 1, yzero: true,
+  series: [{ name: "gap", cls: "s1", x: K.frame_time_ps, y: K.end_gap_A }],
+  caption: fx(K.voltage_V, 1) + " V across a " + fx(K.gap_A / 10, 1) + " nm gap, " + fx(K.temperature_K, 0) + " K. Below about 1.5 Å the open ends have bonded." });
+if (K.rotation_L_deg) chart({ title: "Rotation of the two cores", xl: "time (ps)", yl: "rotation about the axis (°)", xs: "t", xd: 1, yd: 1,
+  series: [{ name: "left core", cls: "s1", x: K.frame_time_ps, y: K.rotation_L_deg }, { name: "right core", cls: "s2", x: K.frame_time_ps, y: K.rotation_R_deg }],
+  caption: "Mean angle of each core about the axis. It fluctuates; no sustained rotation over this run." });
+
+/* ---------- trajectoire 3D ---------- */
+const T = D.traj;
+const scrub = $("scrub"), playBtn = $("play");
+let cur = 0, playing = false, acc = 0, last = 0, draw3d = () => {};
+const NF = T ? T.frames : 1;
+scrub.max = NF - 1;
+function show(f) {
+  cur = f; scrub.value = f;
+  if (K.end_gap_A) {
+    $("r-gap").textContent = fx(K.end_gap_A[f], 1) + " Å";
+    $("r-time").textContent = "t = " + fx(K.frame_time_ps[f], 1) + " ps";
+    $("r-rot").textContent = "rotation " + fx(K.rotation_L_deg[f], 1) + "° / " + fx(K.rotation_R_deg[f], 1) + "°";
+  }
+  $("r-frame").textContent = "frame " + (f + 1) + " / " + NF;
+  draw3d(f);
+}
+function setPlaying(on) { playing = on; playBtn.textContent = on ? "Pause" : "Play"; if (on) { last = performance.now(); requestAnimationFrame(tick); } }
+function tick(now) {
+  if (!playing) return;
+  acc += (now - last) / 1000 * Number($("speed").value); last = now;
+  if (acc >= 1) { const step = Math.floor(acc); acc -= step; show((cur + step) % NF); }
+  requestAnimationFrame(tick);
+}
+playBtn.addEventListener("click", () => setPlaying(!playing));
+scrub.addEventListener("input", () => { setPlaying(false); show(Number(scrub.value)); });
+if (K.ok) $("l-volt").textContent = fx(K.voltage_V, 1) + " V between the shuttles";
+
+(function () {
+  const stage = $("stage"), canvas = $("gl");
+  let renderer;
+  try { if (!window.THREE || !T) throw 0; renderer = new THREE.WebGLRenderer({ canvas, antialias: true }); }
+  catch (e) {
+    canvas.hidden = true;
+    stage.appendChild(Object.assign(document.createElement("div"), { className: "fallback",
+      textContent: T ? "The 3D view could not start in this browser (WebGL unavailable). The numbers and curves are unaffected." : "No closing trajectory in this data set." }));
+    return;
+  }
+  const dec = b64 => new Int16Array(Uint8Array.from(atob(b64), c => c.charCodeAt(0)).buffer);
+  const qi = dec(T.inner), qo = dec(T.outer), NI = T.n_inner, NO = T.n_outer;
+  /* axe du tube (z de LAMMPS) place a l'horizontale : (X, Y, Z) = (z, x, y) */
+  const innerAt = (f, i) => { const o = (f * NI + i) * 3; return [qi[o + 2] / 100, qi[o] / 100, qi[o + 1] / 100]; };
+  const outerAt = i => [qo[3 * i + 2] / 100, qo[3 * i] / 100, qo[3 * i + 1] / 100];
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  const scene = new THREE.Scene(), cam = new THREE.PerspectiveCamera(28, 16 / 9, 1, 5000);
+  cam.up.set(0, 0, 1);
+  scene.add(new THREE.HemisphereLight(0xffffff, 0x556070, 0.9));
+  const sun = new THREE.DirectionalLight(0xffffff, 0.65); sun.position.set(0.3, -0.7, 1); scene.add(sun);
+
+  const pairs = (n, at) => { const p = [], pos = []; for (let i = 0; i < n; i++) pos.push(at(i));
+    for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) { const dx = pos[i][0] - pos[j][0]; if (dx > 1.8 || dx < -1.8) continue;
+      const dy = pos[i][1] - pos[j][1], dz = pos[i][2] - pos[j][2]; if (dx * dx + dy * dy + dz * dz < 3.24) p.push(i, j); } return p; };
+  /* parois externes : figees, dessinees une fois, en transparence pour laisser voir les coeurs */
+  const wallPos = []; const bo = pairs(NO, outerAt);
+  for (let k = 0; k < bo.length; k += 2) wallPos.push(...outerAt(bo[k]), ...outerAt(bo[k + 1]));
+  const wallGeo = new THREE.BufferGeometry(); wallGeo.setAttribute("position", new THREE.Float32BufferAttribute(wallPos, 3));
+  const walls = new THREE.LineSegments(wallGeo, new THREE.LineBasicMaterial({ transparent: true, opacity: 0.32 }));
+  scene.add(walls);
+  /* coeurs : atomes colores par leur charge, liaisons de la premiere image */
+  const atoms = new THREE.InstancedMesh(new THREE.SphereGeometry(0.42, 12, 8), new THREE.MeshLambertMaterial(), NI);
+  const bi = pairs(NI, i => innerAt(0, i)), NB = bi.length / 2;
+  const bonds = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.15, 0.15, 1, 6, 1, true), new THREE.MeshLambertMaterial(), NB);
+  atoms.frustumCulled = bonds.frustumCulled = false;
+  scene.add(atoms, bonds);
+  const qmax = Math.max(...T.q_inner.map(Math.abs)) || 1;
+  const col = {}, tmp = new THREE.Color(), dummy = new THREE.Object3D(), up = new THREE.Vector3(0, 1, 0), dir = new THREE.Vector3();
+  function theme() {
+    for (const k of ["stage", "pos", "neg", "bond", "wall"]) col[k] = new THREE.Color(css("--" + k));
+    renderer.setClearColor(col.stage, 1);
+    walls.material.color.copy(col.wall);
+    for (let i = 0; i < NI; i++) {
+      const t = Math.max(-1, Math.min(1, T.q_inner[i] / qmax)), s = Math.pow(Math.abs(t), 0.6);
+      tmp.copy(col.bond).lerp(t >= 0 ? col.pos : col.neg, s); atoms.setColorAt(i, tmp);
+    }
+    atoms.instanceColor.needsUpdate = true;
+    for (let k = 0; k < NB; k++) bonds.setColorAt(k, col.bond);
+    bonds.instanceColor.needsUpdate = true;
+  }
+  draw3d = function (f) {
+    const P = []; for (let i = 0; i < NI; i++) P.push(innerAt(f, i));
+    for (let i = 0; i < NI; i++) { dummy.position.set(P[i][0], P[i][1], P[i][2]); dummy.quaternion.identity(); dummy.scale.set(1, 1, 1); dummy.updateMatrix(); atoms.setMatrixAt(i, dummy.matrix); }
+    atoms.instanceMatrix.needsUpdate = true;
+    let n = 0;
+    for (let k = 0; k < NB; k++) {
+      const a = P[bi[2 * k]], b = P[bi[2 * k + 1]], dx = b[0] - a[0], dy = b[1] - a[1], dz = b[2] - a[2], len = Math.sqrt(dx * dx + dy * dy + dz * dz);
+      if (len > 2.0) continue;
+      dir.set(dx, dy, dz).divideScalar(len); dummy.quaternion.setFromUnitVectors(up, dir);
+      dummy.position.set(a[0] + dx / 2, a[1] + dy / 2, a[2] + dz / 2); dummy.scale.set(1, len, 1); dummy.updateMatrix(); bonds.setMatrixAt(n++, dummy.matrix);
+    }
+    bonds.count = n; bonds.instanceMatrix.needsUpdate = true;
+    render();
+  };
+  let span = 0; for (let i = 0; i < NO; i++) span = Math.max(span, Math.abs(outerAt(i)[0])); span *= 2;
+  let az = Q.has("az") ? Number(Q.get("az")) : -0.22, pol = 1.25, dist = span * 1.32;
+  function render() {
+    cam.position.set(dist * Math.sin(pol) * Math.sin(az), -dist * Math.sin(pol) * Math.cos(az), dist * Math.cos(pol));
+    cam.lookAt(0, 0, 0); renderer.render(scene, cam);
+  }
+  let drag = null;
+  canvas.addEventListener("pointerdown", e => { drag = [e.clientX, e.clientY]; canvas.setPointerCapture(e.pointerId); });
+  canvas.addEventListener("pointermove", e => { if (!drag) return;
+    az -= (e.clientX - drag[0]) * 0.008; pol = Math.max(0.05, Math.min(3.09, pol - (e.clientY - drag[1]) * 0.008)); drag = [e.clientX, e.clientY]; render(); });
+  canvas.addEventListener("pointerup", () => { drag = null; });
+  canvas.addEventListener("pointercancel", () => { drag = null; });
+  canvas.addEventListener("wheel", e => { e.preventDefault(); dist = Math.max(span * 0.15, Math.min(span * 4, dist * Math.exp(e.deltaY * 0.001))); render(); }, { passive: false });
+  $("view-side").addEventListener("click", () => { az = -0.22; pol = 1.25; dist = span * 1.32; render(); });
+  $("view-axis").addEventListener("click", () => { az = -1.45; pol = 1.45; dist = span * 0.75; render(); });
+  function resize() { const w = stage.clientWidth, h = stage.clientHeight; if (!w || !h) return; renderer.setSize(w, h, false); cam.aspect = w / h; cam.updateProjectionMatrix(); render(); }
+  new ResizeObserver(resize).observe(stage);
+  const retheme = () => { theme(); draw3d(cur); };
+  matchMedia("(prefers-color-scheme: dark)").addEventListener("change", retheme);
+  new MutationObserver(retheme).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+  theme(); resize();
+})();
+
+show(CAP ? Math.max(0, Math.min(NF - 1, Number(Q.get("f")) || 0)) : 0);
+if (!CAP && T && !matchMedia("(prefers-reduced-motion: reduce)").matches) setPlaying(true);
+</script>

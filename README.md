@@ -140,7 +140,9 @@ In version 1, 11 of the 19 tensile write-ups stated "0.01 %/ps" when the tool ha
 ### The two version 2 failures
 
 - **I03**: on a vague request the model picked 2 % max strain on a sheet with 5 % vacancies, got
-  R² = 0.899, passed on the code's warning, but did not re-run.
+  R² = 0.899, passed on the code's warning, but did not re-run. Re-run outside the benchmark with
+  five vacancy draws (`bench/i03_seeds.py`): 0.60 ± 0.03 TPa at 5 % strain; the failed case is the
+  lowest draw fitted over a 2 % window.
 - **B05**: asked for a strain rate of 1 /ps, the model sent 0.01 /ps straight away and never said so.
 
 ### The cost of exposing the bounds
@@ -182,6 +184,52 @@ Its only failure (P04) declined to compute the phonon G mode, then quoted a lite
 
 Tables: `bench/results_v2.csv` (version 2), `bench/results_v1_units.csv` (version 1, strict judge),
 `bench/results.csv` (version 1, original judge).
+
+## Nanotube shuttles: electromechanical properties at reduced size
+
+`nanotube_lab.py` applies the same rules (bounded parameters, code-written LAMMPS input, plausibility
+checks) to the device of M. Hamdi et al., "Rotary Nanomotors Based on Head-to-head Nanotube
+Shuttles", ICRA 2010: two double-wall nanotubes whose cores are pulled together by a voltage.
+Deterministic pipeline, no LLM yet.
+
+[![Two head-to-head nanotube shuttles with the charge on the core atoms and the electromechanical properties](docs/nanotube.png)](https://hamdim99.github.io/nemotron-lammps/nanotube.html)
+
+Interactive page: https://hamdim99.github.io/nemotron-lammps/nanotube.html
+
+    python nanotube_lab.py all --gap 10         # writes runs_nt/results.json (about 35 minutes)
+    python viewer/build_nanotube.py runs_nt     # writes docs/nanotube.html
+
+**This is a reduced model, not a reproduction of the paper**: (5,5)@(10,10) tubes 4.8 nm long instead
+of ten walls and 200 nm, outer walls held fixed, charges computed once and kept fixed during the dynamics.
+
+| Property | Value | How |
+|---|---|---|
+| Interlayer spacing | 3.39 Å | geometry |
+| Retraction force (van der Waals) | 0.87 nN | slope of the energy as the core is pulled out, AIREBO with LJ |
+| Interlayer adhesion | 0.27 J/m² | same slope per unit area |
+| Sliding / rotation barrier | 15 / 36 µeV per atom | rigid shells, infinite tube |
+| Charge per atom at 6 V | 8.8 to 30.2 ×10⁻³ e | atomistic moment method, averaged per axial cell |
+| Capacitance of one tube | 0.124 aF | total charge over voltage |
+| Electrostatic pull at contact | 0.058 nN per V² | Coulomb force on one core |
+| Pull-in voltage | 15.5 V at 1 nm gap, 70.7 V at 5 nm | where the pull exceeds the retraction force |
+| Telescoping oscillation | 47.4 GHz measured, 47.7 GHz estimated | MD against the constant-force estimate |
+| Closing at 23.3 V, 300 K | contact after 1.65 ps | MD with fixed charges |
+
+What agrees with the paper: the charge per atom falls inside the 5 to 34 ×10⁻³ e range of its
+Fig. 2(a), with the same build-up at the open ends.
+
+What does not, and why:
+
+- **Pull-in voltage**: 15 V and more here against about 5 V in the paper. Tubes this short and
+  with two walls carry far less charge; the field needed at this size is beyond what a real device
+  would sustain.
+- **Rotation**: over 12 ps each core's angle fluctuates within about ±8° with no sustained
+  rotation. A run this short on tubes this small neither confirms nor refutes the paper.
+- **Contact**: the open ends bond when the cores touch (gap about 1.0 Å). AIREBO is reactive and
+  the ends are not capped or hydrogen-terminated.
+
+One artefact to know: with point-like charges and no dipoles, the charge alternates in sign between
+the first two rings at an open end; the per-cell average removes it.
 
 ## Limitations
 

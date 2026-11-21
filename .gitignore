@@ -12,3 +12,6 @@ __pycache__/
 .pytest_cache/
 .env
 bench/runs_v2/
+bench/runs_i03/
+runs_nt/
+viewer/nanotube_artifact.html
