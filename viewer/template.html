@@ -34,8 +34,11 @@ h2 { font-size: 1.05rem }
 .muted { color: var(--muted) }
 
 header { display: flex; flex-direction: column; gap: 10px }
-.prompt { font-size: 1rem; max-width: 65ch; color: var(--muted) }
-.prompt q { color: var(--ink); quotes: "“" "”" }
+.promptbox { display: flex; flex-direction: column; gap: 6px; max-width: 780px; margin-top: 6px; padding: 14px 18px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 10px }
+.prompt { margin: 0; display: flex; gap: 10px; align-items: baseline; font: 500 1.15rem/1.45 var(--mono); color: var(--ink) }
+.prompt .chev { color: var(--accent); font-weight: 600 }
+.prompt q { quotes: none; min-width: 0; overflow-wrap: anywhere }
 .tags { display: flex; flex-wrap: wrap; gap: 8px; list-style: none; margin: 0; padding: 0 }
 .tags li { font: 500 0.75rem var(--mono); padding: 3px 9px; border: 1px solid var(--line); border-radius: 999px; color: var(--muted) }
 
@@ -126,7 +129,10 @@ footer { font-size: 0.78rem; color: var(--muted) }
   <header>
     <span class="eyebrow">Molecular dynamics · uniaxial tensile test</span>
     <h1>A graphene sheet stretched by an LLM agent, checked by the solver</h1>
-    <p class="prompt">Request given to the agent: <q id="prompt"></q></p>
+    <div class="promptbox">
+      <span class="eyebrow">Request given to the agent</span>
+      <p class="prompt"><span class="chev" aria-hidden="true">&gt;</span><q id="prompt"></q></p>
+    </div>
   </header>
 
   <section class="bench">

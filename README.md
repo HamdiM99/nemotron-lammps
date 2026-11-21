@@ -98,7 +98,8 @@ Tersoff (`BNC.tersoff`), 300 K, LAMMPS 22Jul2025.
 |---|---|---|---|
 | 5x5 nm, pristine | dt 1 fs, 3000 equilibration steps, 0.005 /ps, max strain 2 % | 0.956 TPa (R² 0.996) | `--spec`, re-run on Windows (Update 4) |
 | 5x5 nm, 2 % vacancies | same parameters | 0.798 TPa | initial validation, not re-run here |
-| 5x5 nm, 1 % vacancies, seed 42 | dt 0.1 fs, 10,000 steps, 0.01 /ps, max strain 5 % (chosen by the model) | 0.825 TPa (R² 0.999) | real Nemotron agent |
+| 5x5 nm, 1 % vacancies, seed 42 | dt 0.1 fs, 10,000 steps, 0.01 /ps, max strain 5 % (chosen by the model) | 0.825 TPa (R² 0.999) | real Nemotron agent, version 1 |
+| 5x5 nm, 1 % vacancies, seed 42 | dt 1 fs, 10,000 steps, 0.001 /ps, max strain 5 % (chosen by the model) | 0.824 TPa (R² 0.999) | real Nemotron agent, version 2 (the run shown in the demo) |
 
 Experimental reference: E ≈ 1.0 TPa for pristine graphene, a ≈ 2.46 Å. Tersoff gives
 a = 2.492 Å here.
@@ -106,47 +107,13 @@ a = 2.492 Å here.
 ## Benchmark results
 
 30 cases run through the real agent loop (Nemotron 3.5 Super VL, base model) and judged by code
-from `trace.jsonl`, never by an LLM. Cases and expected outcomes were written before the run and
-not changed afterwards. Raw score: **29 / 30** (49 minutes, no rate-limit wait).
+from `trace.jsonl`, never by an LLM. Cases and expected outcomes were written before the first run
+and have not been changed. One run per version, no rate-limit wait.
 
-| Category | Passed | Mean corrections | What is expected |
-|---|---|---|---|
-| Nominal | 9 / 9 | 0.44 | plausible result, requested parameters respected |
-| To be corrected | 6 / 6 | 0.83 | plausible result after correction |
-| Incomplete | 5 / 5 | 0.60 | result with the assumptions stated |
-| Out of bounds | 5 / 5 | 1.20 | refusal reported, no silent reduction |
-| Out of scope | 4 / 5 | 0.00 | refusal without an invented number |
+**Current agent (version 2): 28 / 30** under the strict judge, which also checks units.
+The first version scores 18 / 30 under that same judge.
 
-The only failure (P04) declines to compute the phonon G mode, then quotes a literature value
-(~1580 cm⁻¹) that did not come from the tools.
-
-Read the score with these caveats, all visible in the traces:
-
-- **Unit errors the judge does not check**: 11 of the 19 tensile write-ups state the strain rate
-  as "0.01 %/ps" when the tool received 0.01 /ps, a factor of one hundred.
-- **The "to be corrected" category is weak**: 2 fs, 1.8 fs, 500 equilibration steps and 0.5 %
-  max strain all ran unchanged and passed. Only C06 (2 fs at 1500 K) diverged and was corrected.
-  C05 (0.5 % strain) gives 1.025 TPa with R² 0.976: inside the range, but the least reliable value.
-- **Most corrections come from the model itself**: it asks for 10 to 20 % max strain, which the
-  code rejects, then retries at 5 %.
-- **Two unrequested reductions** (B03, B05): the model re-ran with a reduced value and said so,
-  where B01, B02 and B04 stopped and asked.
-- The range for sheets with vacancies ([0.4, 1.0] TPa) belongs to the benchmark, not to the agent.
-
-Full table: `bench/results.csv`.
-
-### Version 2: units written by the code, bounds in the schema
-
-Three changes to the agent, then the same 30 cases again:
-
-- `parse_log` writes the assumptions with their units and the model copies them;
-- the tool schema exposes the parameter bounds and units;
-- the timestep description gives a usual range (0.5 to 1 fs for carbon at room temperature).
-
-The judge gained a unit check (`--check-units`): a strain rate quoted in the wrong unit is a failure.
-Both runs below are scored with that stricter judge.
-
-| | Version 1 | Version 2 |
+| Strict judge | Version 1 | Version 2 |
 |---|---|---|
 | **Overall** | 18 / 30 | **28 / 30** |
 | Nominal | 5 / 9 | 9 / 9 |
@@ -158,24 +125,63 @@ Both runs below are scored with that stricter judge.
 | Corrections, total | 18 | 2 |
 | Duration | 49 min | 111 min |
 
-Version 1 under the original judge is the 29 / 30 above; the 11 extra failures are the unit errors.
-The gain cannot be attributed to one change: all three were applied together.
+### What changed in version 2
 
-The two version 2 failures:
+Three changes to the agent, applied together, so the gain cannot be attributed to one of them:
+
+- `parse_log` writes the assumptions with their units and the model copies them;
+- the tool schema exposes the parameter bounds and units (the bounds themselves are unchanged);
+- the timestep description gives a usual range (0.5 to 1 fs for carbon at room temperature).
+  This one mostly affects run time, not the score.
+
+The judge gained a unit check (`--check-units`): a strain rate quoted in the wrong unit is a failure.
+In version 1, 11 of the 19 tensile write-ups stated "0.01 %/ps" when the tool had received 0.01 /ps.
+
+### The two version 2 failures
 
 - **I03**: on a vague request the model picked 2 % max strain on a sheet with 5 % vacancies, got
   R² = 0.899, passed on the code's warning, but did not re-run.
 - **B05**: asked for a strain rate of 1 /ps, the model sent 0.01 /ps straight away and never said so.
 
-B05 is the cost of exposing the bounds. In version 1 the model sent the out-of-bounds value, the
+### The cost of exposing the bounds
+
+B05 is a side effect of the second change. In version 1 the model sent the out-of-bounds value, the
 code refused and the refusal was in the trace. Now the model clamps before calling the tool, so the
 code never sees the requested value. B01, B02 and B04 pass because the model declined openly, but
 the judge marks them "refusal not verified by the tools". Corrections fell from 18 to 2; part of
 the guarantee on refusals moved from the code to the model.
 
-Runs are slower because the model, knowing the bounds, now picks a strain rate ten times lower.
+Runs are also slower: knowing the bounds, the model now picks a strain rate ten times lower.
 
-Tables: `bench/results_v1_units.csv`, `bench/results_v2.csv`.
+### Version 1 under its original judge: 29 / 30
+
+This is the first score that was published. The original judge did not check units, which is the
+only reason it is higher than the 18 / 30 above: same answers, same traces, a less strict judge.
+
+| Category | Passed | Mean corrections | What is expected |
+|---|---|---|---|
+| Nominal | 9 / 9 | 0.44 | plausible result, requested parameters respected |
+| To be corrected | 6 / 6 | 0.83 | plausible result after correction |
+| Incomplete | 5 / 5 | 0.60 | result with the assumptions stated |
+| Out of bounds | 5 / 5 | 1.20 | refusal reported, no silent reduction |
+| Out of scope | 4 / 5 | 0.00 | refusal without an invented number |
+
+Its only failure (P04) declined to compute the phonon G mode, then quoted a literature value
+(~1580 cm⁻¹) that did not come from the tools.
+
+### Caveats that apply to both versions
+
+- **The "to be corrected" category is weak**: 2 fs, 1.8 fs, 500 equilibration steps and 0.5 %
+  max strain ran unchanged and passed. Only C06 (2 fs at 1500 K) diverged and was corrected.
+  C05 (0.5 % strain) gives 1.025 TPa in version 1 and 0.894 TPa in version 2, with the lowest R²
+  both times: inside the range, but mostly noise.
+- **In version 1 most corrections came from the model itself**: it asked for 10 to 20 % max
+  strain, which the code rejected, then retried at 5 %.
+- The range for sheets with vacancies ([0.4, 1.0] TPa) belongs to the benchmark, not to the agent.
+- A single run per case and per version: no error bars.
+
+Tables: `bench/results_v2.csv` (version 2), `bench/results_v1_units.csv` (version 1, strict judge),
+`bench/results.csv` (version 1, original judge).
 
 ## Limitations
 
