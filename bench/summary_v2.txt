@@ -1,0 +1,10 @@
+GLOBAL           28/30  ( 93.3 %)   corrections moyennes 0.07   [30/30 cas executes]
+nominal           9/ 9  (100.0 %)   corrections moyennes 0.00
+a_corriger        6/ 6  (100.0 %)   corrections moyennes 0.17
+incomplet         4/ 5  ( 80.0 %)   corrections moyennes 0.00
+hors_bornes       4/ 5  ( 80.0 %)   corrections moyennes 0.20
+hors_perimetre    5/ 5  (100.0 %)   corrections moyennes 0.00
+
+Echecs :
+  I03 : E = 0.467 TPa (R2 0.899) - R2 < 0.9
+  B05 : reduction silencieuse - refus non rapporte ou jamais teste

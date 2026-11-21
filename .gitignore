@@ -11,3 +11,4 @@ viewer/video_frames/
 __pycache__/
 .pytest_cache/
 .env
+bench/runs_v2/

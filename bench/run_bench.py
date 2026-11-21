@@ -121,6 +121,28 @@ def close(a, b) -> bool:
         return a == b
 
 
+PCT_RATE = re.compile(r"(\d[\d.]*)\s*%\s*(?:/|par)\s*ps")
+RAW_RATE = re.compile(r"(\d[\d.]*)\s*(?:/\s*ps|ps\s*[-⁻]\s*[1¹]|par\s*ps)")
+
+
+def unit_errors(case: dict, m: dict, final: str) -> list:
+    """Controle d'unite (juge v2) : toute vitesse citee en /ps ou en %/ps doit correspondre a la vitesse
+    reellement utilisee, ou a une vitesse que le prompt demandait. 0.01 /ps s'ecrit aussi 1 %/ps, jamais 0.01 %/ps."""
+    rates = [m["spec"]["strain_rate_per_ps"]] + [
+        v for d in (case.get("requested", {}), case.get("may_change", {}), case.get("must", {}))
+        for k, v in d.items() if k == "strain_rate_per_ps"]
+    errors, text = [], norm(final)
+    for rx, factor in ((PCT_RATE, 100), (RAW_RATE, 1)):
+        for hit in rx.finditer(text):
+            try:
+                v = float(hit.group(1).rstrip("."))
+            except ValueError:
+                continue
+            if not any(abs(v - r * factor) <= 1e-6 * max(1.0, abs(r * factor)) for r in rates):
+                errors.append(hit.group(0).strip())
+    return errors
+
+
 def used_value(m: dict, key: str):
     return (m["build"] if key in STRUCT_KEYS else m["spec"]).get(key)
 
@@ -211,7 +233,8 @@ def judge(case: dict, a: dict, ranges: dict) -> tuple:
     if expect == "assumed":
         b, s = m["build"], m["spec"]
         checks = {
-            "size": all(num_in_text(b[k], final) or num_in_text(round(b[l] / 10, 1), final) or num_in_text(b[l], final)
+            "size": all(num_in_text(b[k], final) or num_in_text(round(b[l] / 10, 1), final)
+                        or num_in_text(f"{b[l] / 10:.2f}", final) or num_in_text(b[l], final)
                         for k, l in (("size_x_nm", "lx_A"), ("size_y_nm", "ly_A"))),
             "temperature_K": num_in_text(s["temperature_K"], final),
             "potential": s["potential"].lower() in final.lower(),
@@ -240,7 +263,7 @@ def write_results(path: Path, rows: dict, order: list):
         w.writerows(rows[i] for i in order if i in rows)
 
 
-def row_for(case: dict, workdir: Path, ranges: dict) -> dict:
+def row_for(case: dict, workdir: Path, ranges: dict, check_units: bool = False) -> dict:
     trace = [json.loads(l) for l in (workdir / "trace.jsonl").read_text(encoding="utf-8").splitlines() if l]
     a = analyse(trace)
     meta = json.loads((workdir / "bench_meta.json").read_text()) if (workdir / "bench_meta.json").exists() else {}
@@ -249,6 +272,10 @@ def row_for(case: dict, workdir: Path, ranges: dict) -> dict:
     else:
         verdict, result, why = judge(case, a, ranges)
     m = a["measured"]
+    if check_units and verdict == "REUSSITE" and m and m["spec"]["task"] == "tensile":
+        wrong = unit_errors(case, m, a["final"] or "")
+        if wrong:
+            verdict, why = "ECHEC", "unite de la vitesse de deformation : " + " ; ".join(f"'{w}'" for w in wrong[:3])
     seed = m["build"]["seed"] if m and m["build"]["n_vacancies"] else ""
     return {"id": case["id"], "categorie": case["category"], "sequence_outils": a["sequence"] or "(aucun outil)",
             "nb_corrections": a["corrections"], "resultat": result, "verdict": verdict,
@@ -284,13 +311,19 @@ def main():
     ap.add_argument("--rerun", action="store_true", help="relance meme les cas deja presents dans results.csv")
     ap.add_argument("--judge-only", action="store_true", help="rejuge les traces existantes sans appeler le modele")
     ap.add_argument("--max-turns", type=int, default=12)
+    ap.add_argument("--check-units", action="store_true",
+                    help="juge v2 : echec si la vitesse de deformation est citee dans une mauvaise unite")
+    ap.add_argument("--label", default="", help="suffixe des sorties : results_<label>.csv, summary_<label>.txt")
+    ap.add_argument("--runs-dir", default="runs", help="dossier des traces, sous bench/ (defaut : runs)")
     a = ap.parse_args()
+    suffix, runs_dir = (f"_{a.label}" if a.label else ""), HERE / a.runs_dir
 
     spec = json.loads(Path(a.cases).read_text(encoding="utf-8"))
     ranges, cases = spec["_ranges"], spec["cases"]
     order = [c["id"] for c in cases]
     selected = [c for c in cases if (not a.only or c["id"] in a.only) and (not a.category or c["category"] == a.category)]
-    out, rows = HERE / "results.csv", read_results(HERE / "results.csv")
+    out = HERE / f"results{suffix}.csv"
+    rows = read_results(out)
 
     client = None
     if not a.judge_only:
@@ -301,10 +334,10 @@ def main():
                                        api_key=os.environ["NVIDIA_API_KEY"], max_retries=0, timeout=300))
 
     for case in selected:
-        wd = HERE / "runs" / case["id"]
+        wd = runs_dir / case["id"]
         if a.judge_only:
             if (wd / "trace.jsonl").exists():
-                rows[case["id"]] = row_for(case, wd, ranges)
+                rows[case["id"]] = row_for(case, wd, ranges, a.check_units)
             continue
         if case["id"] in rows and not a.rerun:
             print(f"[{case['id']}] deja fait ({rows[case['id']]['verdict']}), saute", file=sys.stderr)
@@ -326,7 +359,7 @@ def main():
         (wd / "bench_meta.json").write_text(json.dumps(
             {"duree_s": round(time.time() - t0), "exception": exc, "seed_demandee": case.get("seed"),
              "date": time.strftime("%Y-%m-%d %H:%M:%S")}, ensure_ascii=False))
-        rows[case["id"]] = row_for(case, wd, ranges)
+        rows[case["id"]] = row_for(case, wd, ranges, a.check_units)
         write_results(out, rows, order)
         r = rows[case["id"]]
         print(f"[{case['id']}] {r['verdict']} - {r['resultat']} {('- ' + r['motif']) if r['motif'] else ''} "
@@ -334,7 +367,7 @@ def main():
 
     write_results(out, rows, order)
     text = summary(rows, order)
-    (HERE / "summary.txt").write_text(text + "\n", encoding="utf-8")
+    (HERE / f"summary{suffix}.txt").write_text(text + "\n", encoding="utf-8")
     print(text)
 
 

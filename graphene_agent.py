@@ -143,7 +143,7 @@ class Workbench:
 
         self.structure = {"n_atoms": len(atoms), "n_vacancies": n_vac, "nx": nx, "ny": ny,
                           "lx_A": round(nx * ax, 3), "ly_A": round(ny * ay, 3),
-                          "vacancy_pct": vacancy_pct}
+                          "vacancy_pct": vacancy_pct, "seed": seed}
         self.spec, self.smoke_ok, self.full_ok = None, False, False
         return {"ok": True, **self.structure}
 
@@ -331,7 +331,24 @@ run {deform}
                 warnings.append(f"module de Young {res['young_TPa']} TPa hors plage attendue "
                                 f"[{lo}, {hi}] pour du graphene sans defaut")
         res["reference"] = "graphene sans defaut : E ~ 1.0 TPa (experience), a ~ 2.46 A"
+        res["hypotheses"] = self._assumptions()
         return {"ok": True, "result": res, "warnings": warnings}
+
+    def _assumptions(self) -> list:
+        """Hypotheses deja redigees, unites comprises : le modele les recopie au lieu de les reformuler."""
+        st, s = self.structure, self.spec
+        out = [f"potentiel : {s['potential']} ({Path(s['potential_path']).name})",
+               f"feuille : {st['lx_A'] / 10:.2f} x {st['ly_A'] / 10:.2f} nm, {st['n_atoms']} atomes",
+               (f"lacunes : {st['n_vacancies']} atomes retires ({st['vacancy_pct']:g} %), graine {st['seed']}"
+                if st["n_vacancies"] else "lacunes : aucune")]
+        if s["task"] == "tensile":
+            rate, dt_ps = s["strain_rate_per_ps"], s["timestep_fs"] * 1e-3
+            out += [f"temperature : {s['temperature_K']:g} K",
+                    f"pas de temps : {s['timestep_fs']:g} fs",
+                    f"equilibration : {s['equil_steps']} pas ({s['equil_steps'] * dt_ps:g} ps)",
+                    f"vitesse de deformation : {rate:g} /ps (soit {rate * 100:g} %/ps)",
+                    f"deformation maximale : {s['max_strain']:g} (soit {s['max_strain'] * 100:g} %)"]
+        return out
 
 
 # --------------------------------------------------------------------------- #
@@ -376,18 +393,28 @@ def _fn(name, desc, props, required=()):
         "type": "object", "properties": props, "required": list(required)}}}
 
 
+def _num(bound: str, desc: str, kind: str = "number") -> dict:
+    """Parametre numerique : le schema annonce au modele les memes bornes que celles verifiees par le code."""
+    lo, hi = BOUNDS[bound]
+    return {"type": kind, "minimum": lo, "maximum": hi, "description": f"{desc} ; bornes [{lo:g}, {hi:g}]"}
+
+
 TOOLS = [
     _fn("build_structure", "Construit une feuille de graphene periodique et ecrit le fichier de donnees.",
-        {"size_x_nm": {"type": "number"}, "size_y_nm": {"type": "number"},
-         "vacancy_pct": {"type": "number", "description": "pourcentage d'atomes retires"},
+        {"size_x_nm": _num("size_nm", "longueur selon x, en nm"),
+         "size_y_nm": _num("size_nm", "longueur selon y, en nm"),
+         "vacancy_pct": _num("vacancy_pct", "pourcentage d'atomes retires"),
          "seed": {"type": "integer"}}, ["size_x_nm", "size_y_nm"]),
     _fn("write_input", "Valide les parametres et genere l'input LAMMPS. "
         "tersoff ou airebo conviennent pour la mecanique ; aucun des deux ne donne de proprietes electroniques.",
         {"task": {"type": "string", "enum": ["relax", "tensile"]},
          "potential": {"type": "string", "enum": list(POTENTIALS)},
-         "temperature_K": {"type": "number"}, "timestep_fs": {"type": "number"},
-         "equil_steps": {"type": "integer"}, "strain_rate_per_ps": {"type": "number"},
-         "max_strain": {"type": "number"}}, ["task"]),
+         "temperature_K": _num("temperature_K", "temperature, en K"),
+         "timestep_fs": _num("timestep_fs", "pas de temps, en fs ; 0.5 a 1 fs convient pour le carbone a "
+                             "temperature ambiante, reduire a haute temperature"),
+         "equil_steps": _num("equil_steps", "nombre de pas d'equilibration", "integer"),
+         "strain_rate_per_ps": _num("strain_rate_per_ps", "vitesse de deformation, en 1/ps (0.01 = 1 %/ps)"),
+         "max_strain": _num("max_strain", "deformation maximale, fraction sans unite (0.05 = 5 %)")}, ["task"]),
     _fn("run", "Lance LAMMPS. 'smoke' = run court de validation, obligatoire avant 'full'.",
         {"mode": {"type": "string", "enum": ["smoke", "full"]}}, ["mode"]),
     _fn("parse_log", "Extrait les grandeurs du run complet et applique les controles de plausibilite.", {}),
@@ -398,8 +425,8 @@ Ordre : build_structure, write_input, run(smoke), run(full), parse_log.
 Si un outil renvoie ok=false, lis les erreurs, corrige les parametres et recommence.
 Tu ne peux mesurer que ce que les outils permettent : relaxation (energie, maille) et traction (module de Young).
 Si la demande sort de ce cadre (proprietes electroniques, conductivite thermique...), dis-le au lieu d'improviser.
-Dans la reponse finale, donne la valeur, les hypotheses (potentiel, taille, temperature, vitesse de deformation)
-et tous les avertissements renvoyes par parse_log. N'invente aucun chiffre."""
+Dans la reponse finale, donne la valeur, recopie telles quelles les hypotheses renvoyees par parse_log
+(champ "hypotheses", unites comprises, sans les convertir) et tous les avertissements. N'invente aucun chiffre."""
 
 
 def run_agent(prompt: str, workdir: str, max_turns: int = 12, client=None, model: str | None = None) -> str:

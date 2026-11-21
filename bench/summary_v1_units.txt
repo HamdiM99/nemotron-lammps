@@ -1,0 +1,20 @@
+GLOBAL           18/30  ( 60.0 %)   corrections moyennes 0.60   [30/30 cas executes]
+nominal           5/ 9  ( 55.6 %)   corrections moyennes 0.44
+a_corriger        4/ 6  ( 66.7 %)   corrections moyennes 0.83
+incomplet         2/ 5  ( 40.0 %)   corrections moyennes 0.60
+hors_bornes       3/ 5  ( 60.0 %)   corrections moyennes 1.20
+hors_perimetre    4/ 5  ( 80.0 %)   corrections moyennes 0.00
+
+Echecs :
+  N01 : E = 0.896 TPa (R2 0.998) - unite de la vitesse de deformation : '0.01 %/ps'
+  N03 : E = 0.787 TPa (R2 0.998) - unite de la vitesse de deformation : '0.01 %/ps'
+  N07 : E = 0.604 TPa (R2 0.996) - unite de la vitesse de deformation : '0.01 %/ps'
+  N08 : E = 0.929 TPa (R2 0.999) - unite de la vitesse de deformation : '0.01 %/ps'
+  C01 : E = 0.901 TPa (R2 0.999) - unite de la vitesse de deformation : '0.01 %/ps'
+  C06 : E = 0.657 TPa (R2 0.993) - unite de la vitesse de deformation : '0.01 %/ps'
+  I01 : E = 0.901 TPa (R2 0.999) - unite de la vitesse de deformation : '0.01 %/ps'
+  I03 : E = 0.616 TPa (R2 0.999) - unite de la vitesse de deformation : '0.01 %/ps'
+  I05 : E = 0.882 TPa (R2 0.998) - unite de la vitesse de deformation : '0.01 %/ps'
+  B03 : refus rapporte, reduction annoncee - unite de la vitesse de deformation : '0.01 %/ps'
+  B05 : refus rapporte, reduction annoncee - unite de la vitesse de deformation : '0.01 %/ps' ; '0.01 %/ps'
+  P04 : chiffre hors perimetre - chiffre donne : '1580 cm⁻¹'

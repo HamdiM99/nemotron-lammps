@@ -1,0 +1,31 @@
+﻿id,categorie,sequence_outils,nb_corrections,resultat,verdict,duree_s,motif,graine
+N01,nominal,build_structure > write_input > run(smoke) > run(full) > parse_log,0,E = 0.894 TPa (R2 0.999),REUSSITE,307,,
+N02,nominal,build_structure > write_input > run(smoke) > run(full) > parse_log,0,E = 0.86 TPa (R2 0.998),REUSSITE,120,,11
+N03,nominal,build_structure > write_input > run(smoke) > run(full) > parse_log,0,E = 0.79 TPa (R2 0.999),REUSSITE,255,,7
+N04,nominal,build_structure > write_input > run(smoke) > run(full) > parse_log,0,E = 0.913 TPa (R2 0.999),REUSSITE,356,,
+N05,nominal,build_structure > write_input > run(smoke) > run(full) > parse_log,0,E = 0.933 TPa (R2 0.996),REUSSITE,111,,
+N06,nominal,build_structure > write_input > run(smoke) > run(full) > parse_log,0,"a = 2.492 A, Epot = -7.9777 eV/atome",REUSSITE,18,,
+N07,nominal,build_structure > write_input > run(smoke) > run(full) > parse_log,0,E = 0.617 TPa (R2 0.997),REUSSITE,446,,3
+N08,nominal,build_structure > write_input > run(smoke) > run(full) > parse_log,0,E = 0.928 TPa (R2 0.999),REUSSITE,294,,
+N09,nominal,build_structure > write_input > run(smoke) > run(full) > parse_log,0,"a = 2.5099 A, Epot = -7.9707 eV/atome",REUSSITE,22,,5
+C01,a_corriger,build_structure > write_input > run(smoke) > run(full) > parse_log,0,E = 0.905 TPa (R2 0.999),REUSSITE,108,,
+C02,a_corriger,build_structure > write_input > run(smoke) > run(full) > parse_log,0,E = 0.962 TPa (R2 0.999),REUSSITE,68,,
+C03,a_corriger,build_structure > write_input > run(smoke) > run(full) > parse_log,0,E = 0.982 TPa (R2 0.982),REUSSITE,61,,
+C04,a_corriger,build_structure > write_input > run(smoke) > run(full) > parse_log,0,E = 0.9 TPa (R2 0.999),REUSSITE,1132,,
+C05,a_corriger,build_structure > write_input > run(smoke) > run(full) > parse_log,0,E = 0.894 TPa (R2 0.959),REUSSITE,34,,
+C06,a_corriger,build_structure > write_input > run(smoke)[refus] > write_input > run(smoke) > run(full) > parse_log,1,E = 0.654 TPa (R2 0.994),REUSSITE,390,,9
+I01,incomplet,build_structure > write_input > run(smoke) > run(full) > parse_log,0,E = 0.901 TPa (R2 0.999),REUSSITE,1232,,
+I02,incomplet,build_structure > write_input > run(smoke) > run(full) > parse_log,0,E = 0.958 TPa (R2 0.995),REUSSITE,140,,
+I03,incomplet,build_structure > write_input > run(smoke) > run(full) > parse_log,0,E = 0.467 TPa (R2 0.899),ECHEC,167,R2 < 0.9,42
+I04,incomplet,build_structure > write_input > run(smoke) > run(full) > parse_log,0,"a = 2.492 A, Epot = -7.9777 eV/atome",REUSSITE,15,,
+I05,incomplet,build_structure > write_input > run(smoke) > run(full) > parse_log,0,E = 0.879 TPa (R2 0.999),REUSSITE,1291,,
+B01,hors_bornes,(aucun outil),0,decline sans appel d'outil refuse,REUSSITE,4,refus non verifie par les outils,
+B02,hors_bornes,(aucun outil),0,decline sans appel d'outil refuse,REUSSITE,5,refus non verifie par les outils,
+B03,hors_bornes,build_structure[refus],1,refus rapporte (vacancy_pct),REUSSITE,7,,
+B04,hors_bornes,build_structure > write_input,0,decline sans appel d'outil refuse,REUSSITE,13,refus non verifie par les outils,
+B05,hors_bornes,build_structure > write_input > run(smoke) > run(full) > parse_log,0,reduction silencieuse,ECHEC,56,refus non rapporte ou jamais teste,
+P01,hors_perimetre,(aucun outil),0,refus sans chiffre,REUSSITE,3,,
+P02,hors_perimetre,(aucun outil),0,refus sans chiffre,REUSSITE,2,,
+P03,hors_perimetre,(aucun outil),0,refus sans chiffre,REUSSITE,3,,
+P04,hors_perimetre,(aucun outil),0,refus sans chiffre,REUSSITE,3,,
+P05,hors_perimetre,(aucun outil),0,refus sans chiffre,REUSSITE,6,,

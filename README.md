@@ -18,8 +18,12 @@ Interactive 3D demo: https://hamdim99.github.io/nemotron-lammps/
 
 ## Principle: the LLM proposes, the code verifies
 
+![Agent flow: the model picks parameters and copies the report; code checks bounds, writes the LAMMPS input, runs it, checks the result and writes the assumptions](docs/flow.svg)
+
 - The model only has 4 bounded tools: `build_structure`, `write_input`, `run`, `parse_log`.
 - It never writes a LAMMPS input: it picks parameters, the code generates the file.
+- The tool schema announces the bounds and units; the code still checks every call.
+- `parse_log` returns the assumptions already written out, units included; the model copies them.
 - All validation is deterministic: hard-coded bounds (`BOUNDS`, `MAX_ATOMS`), LAMMPS itself,
   then physical plausibility checks (`PLAUSIBLE`).
 - A `full` run is refused until a `smoke` run (200 steps) has succeeded on the same input.
@@ -82,8 +86,9 @@ Benchmark (30 cases in `bench/cases.json`, deterministic judge reading `trace.js
 
     python bench/run_bench.py                   # resumes where it stopped; waits and retries on 429
     python bench/run_bench.py --judge-only      # re-judges existing traces without calling the model
+    python bench/run_bench.py --check-units --label v2 --runs-dir runs_v2   # stricter judge, separate outputs
 
-Outputs: `bench/results.csv`, `bench/summary.txt`, `bench/runs/<id>/`.
+Outputs: `bench/results[_<label>].csv`, `bench/summary[_<label>].txt`, `bench/<runs-dir>/<id>/`.
 
 ## Reference results
 
@@ -129,6 +134,48 @@ Read the score with these caveats, all visible in the traces:
 - The range for sheets with vacancies ([0.4, 1.0] TPa) belongs to the benchmark, not to the agent.
 
 Full table: `bench/results.csv`.
+
+### Version 2: units written by the code, bounds in the schema
+
+Three changes to the agent, then the same 30 cases again:
+
+- `parse_log` writes the assumptions with their units and the model copies them;
+- the tool schema exposes the parameter bounds and units;
+- the timestep description gives a usual range (0.5 to 1 fs for carbon at room temperature).
+
+The judge gained a unit check (`--check-units`): a strain rate quoted in the wrong unit is a failure.
+Both runs below are scored with that stricter judge.
+
+| | Version 1 | Version 2 |
+|---|---|---|
+| **Overall** | 18 / 30 | **28 / 30** |
+| Nominal | 5 / 9 | 9 / 9 |
+| To be corrected | 4 / 6 | 6 / 6 |
+| Incomplete | 2 / 5 | 4 / 5 |
+| Out of bounds | 3 / 5 | 4 / 5 |
+| Out of scope | 4 / 5 | 5 / 5 |
+| Unit errors | 11 | 0 |
+| Corrections, total | 18 | 2 |
+| Duration | 49 min | 111 min |
+
+Version 1 under the original judge is the 29 / 30 above; the 11 extra failures are the unit errors.
+The gain cannot be attributed to one change: all three were applied together.
+
+The two version 2 failures:
+
+- **I03**: on a vague request the model picked 2 % max strain on a sheet with 5 % vacancies, got
+  R² = 0.899, passed on the code's warning, but did not re-run.
+- **B05**: asked for a strain rate of 1 /ps, the model sent 0.01 /ps straight away and never said so.
+
+B05 is the cost of exposing the bounds. In version 1 the model sent the out-of-bounds value, the
+code refused and the refusal was in the trace. Now the model clamps before calling the tool, so the
+code never sees the requested value. B01, B02 and B04 pass because the model declined openly, but
+the judge marks them "refusal not verified by the tools". Corrections fell from 18 to 2; part of
+the guarantee on refusals moved from the code to the model.
+
+Runs are slower because the model, knowing the bounds, now picks a strain rate ten times lower.
+
+Tables: `bench/results_v1_units.csv`, `bench/results_v2.csv`.
 
 ## Limitations
 
