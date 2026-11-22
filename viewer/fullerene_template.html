@@ -1,0 +1,421 @@
+<title>Fullerene Charge Shuttle</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@500;600&display=swap">
+<style>
+/* Meme banc que les pages graphene et nanotubes : la scene 3D a gauche, les grandeurs a droite,
+   les deux courbes dans la scene elle-meme, puis la methode et la portee. */
+:root {
+  --bg: #F2F4F7; --surface: #FFFFFF; --stage: #E6EAF0; --ink: #16202B; --muted: #5A6777; --line: #D3DAE3;
+  --accent: #1463C6; --pos: #D9542B; --neg: #2B7FD9; --bond: #8A95A2; --band: #E8EDF4;
+  --good: #1F7A4D; --bad: #B3261E;
+  --display: "Space Grotesk", "Segoe UI", system-ui, sans-serif;
+  --body: "Inter", "Segoe UI", system-ui, sans-serif;
+  --mono: "JetBrains Mono", "Cascadia Mono", Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0B1016; --surface: #121A23; --stage: #080C11; --ink: #E6ECF2; --muted: #8E9BAB; --line: #243140;
+  --accent: #5AA9FF; --pos: #FF7A4D; --neg: #4DA3FF; --bond: #7C8896; --band: #1A2633;
+  --good: #4CC38A; --bad: #FF7B72; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #0B1016; --surface: #121A23; --stage: #080C11; --ink: #E6ECF2; --muted: #8E9BAB; --line: #243140;
+  --accent: #5AA9FF; --pos: #FF7A4D; --neg: #4DA3FF; --bond: #7C8896; --band: #1A2633;
+  --good: #4CC38A; --bad: #FF7B72; color-scheme: dark }
+
+*, *::before, *::after { box-sizing: border-box }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.55 var(--body) }
+.wrap { max-width: 1240px; margin: 0 auto; padding-block: 28px 48px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: flex; flex-direction: column; gap: 22px }
+h1, h2 { font-family: var(--display); font-weight: 600; margin: 0; text-wrap: balance }
+h1 { font-size: clamp(1.5rem, 3.2vw, 2.1rem); letter-spacing: -0.01em; line-height: 1.15 }
+h2 { font-size: 1rem }
+p { margin: 0 }
+.eyebrow { font: 500 0.72rem var(--mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted) }
+.mono { font-family: var(--mono); font-variant-numeric: tabular-nums }
+.muted { color: var(--muted) }
+header { display: flex; flex-direction: column; gap: 10px }
+.lede { max-width: 70ch; color: var(--muted) }
+.lede b { color: var(--ink); font-weight: 600 }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; min-width: 0 }
+
+.bench { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: 22px; align-items: start }
+@media (max-width: 900px) { .bench { grid-template-columns: minmax(0, 1fr) } }
+.stage { position: relative; background: var(--stage); border-radius: 10px 10px 0 0; aspect-ratio: 16 / 12.4; max-width: 100%; overflow: hidden }
+@media (max-width: 700px) { .stage { aspect-ratio: 1 / 1 } }
+.stage canvas { display: block; width: 100%; height: 100%; touch-action: none; cursor: grab }
+.stage canvas:active { cursor: grabbing }
+.readout { position: absolute; top: 12px; left: 14px; display: flex; flex-direction: column; gap: 2px; pointer-events: none }
+.readout .big { font: 500 1.5rem/1.1 var(--mono); font-variant-numeric: tabular-nums }
+.live { position: absolute; inset: auto 0 0 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 18px;
+  padding: 18px 14px 6px; pointer-events: none;
+  background: linear-gradient(to bottom, transparent, var(--stage) 30%) }
+.live .mini { padding: 0; gap: 0; display: flex; flex-direction: column }
+.live .mini .eyebrow { font-size: 0.66rem }
+.fallback { position: absolute; inset: 0; display: grid; place-items: center; padding: 24px; text-align: center; color: var(--muted) }
+.legend3d { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 22px; padding: 10px 14px;
+  font-size: 0.75rem; color: var(--muted); border-bottom: 1px solid var(--line) }
+.scale { display: inline-flex; align-items: center; gap: 8px; font-family: var(--mono) }
+.ramp { width: 110px; height: 6px; border-radius: 3px; background: linear-gradient(90deg, var(--neg), var(--bond), var(--pos)) }
+.transport { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; padding: 12px 14px }
+.transport input[type=range] { flex: 1 1 180px; min-width: 0; accent-color: var(--accent) }
+button, select { font: 500 0.82rem var(--body); color: var(--ink); background: var(--surface); border: 1px solid var(--line);
+  border-radius: 7px; padding: 6px 12px; cursor: pointer }
+button:hover, select:hover { border-color: var(--muted) }
+button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px }
+button.primary { background: var(--accent); border-color: var(--accent); color: var(--surface); min-width: 86px }
+
+.side { display: flex; flex-direction: column; gap: 22px; min-width: 0 }
+.card { padding: 18px; display: flex; flex-direction: column; gap: 12px }
+.hero { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap }
+.hero .value { font: 600 2.6rem/1 var(--display); font-variant-numeric: tabular-nums }
+.hero .unit { font: 500 1.1rem var(--display); color: var(--muted) }
+.note { font-size: 0.8rem; color: var(--muted) }
+dl.facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 16px; margin: 0 }
+dl.facts dt { font-size: 0.72rem; color: var(--muted) }
+dl.facts dd { margin: 0; font: 500 0.9rem var(--mono); font-variant-numeric: tabular-nums; overflow-wrap: anywhere }
+.status { display: inline-flex; align-items: center; gap: 6px; font-size: 0.8rem }
+.status.ok { color: var(--good) } .status.warn { color: var(--bad) }
+
+.charts { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 420px), 1fr)); gap: 22px }
+.chart { padding: 16px 16px 10px; display: flex; flex-direction: column; gap: 6px }
+.chart svg { display: block; width: 100%; height: auto; overflow: visible }
+.chart text { font: 10.5px var(--mono); fill: var(--muted) }
+.chart .axis { stroke: var(--line); stroke-width: 1; fill: none }
+.chart .zero { stroke: var(--muted); stroke-width: 1; stroke-dasharray: 2 4; fill: none; opacity: .7 }
+.chart .grid { stroke: var(--line); stroke-width: 1; fill: none; opacity: .75 }
+.chart .s1 { stroke: var(--accent); stroke-width: 2; fill: none; stroke-linejoin: round }
+.chart .bandr { fill: var(--band); stroke: none }
+.chart .hair { stroke: var(--ink); stroke-width: 1; fill: none }
+.chart .m1 { fill: var(--accent); stroke: var(--surface); stroke-width: 2 }
+.cap { font-size: 0.78rem; color: var(--muted) }
+table.rates { border-collapse: collapse; width: 100%; font: 0.8rem var(--mono); font-variant-numeric: tabular-nums }
+table.rates th { text-align: left; font: 500 0.72rem var(--body); color: var(--muted); padding: 4px 6px 4px 0; border-bottom: 1px solid var(--line) }
+table.rates td { padding: 5px 6px 5px 0; border-bottom: 1px solid var(--line) }
+.tablewrap { overflow-x: auto }
+
+.lower { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 22px; align-items: start }
+@media (max-width: 900px) { .lower { grid-template-columns: minmax(0, 1fr) } }
+.block { padding: 18px; display: flex; flex-direction: column; gap: 12px }
+.block ul { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px }
+.block li { max-width: 68ch }
+footer { font-size: 0.78rem; color: var(--muted) }
+.capture .lower, .capture footer, .capture .transport button, .capture .transport select { display: none }
+</style>
+
+<div class="wrap">
+  <header>
+    <span class="eyebrow">Molecular dynamics and electrostatics · reduced-size model</span>
+    <h1>A C60 carries charge back and forth between two nanotubes</h1>
+    <p class="lede">Two capped (10,10) carbon nanotubes face each other at opposite voltages. A fullerene at the mouth of one
+      tube picks up its charge, is pulled across the gap, bounces off the far cap and comes back with the opposite charge:
+      <b>a nanometre-scale version of Franklin's electrostatic bell</b>. Its charge is recomputed during the flight.</p>
+  </header>
+
+  <section class="bench">
+    <div class="panel">
+      <div class="stage" id="stage">
+        <canvas id="gl" aria-label="3D view of a C60 fullerene shuttling between two capped nanotubes"></canvas>
+        <div class="readout">
+          <span class="eyebrow">Net charge on the C60</span>
+          <span class="big" id="r-q">–</span>
+          <span class="mono muted" id="r-time"></span>
+          <span class="mono muted" id="r-where"></span>
+        </div>
+        <!-- les deux courbes vivent dans la scene, sous les tubes, avec un curseur qui suit l'animation -->
+        <div class="live" id="live">
+          <div class="chart mini"><span class="eyebrow">Position of the C60 along the axis</span><div id="o-z"></div></div>
+          <div class="chart mini"><span class="eyebrow">Net charge on the C60</span><div id="o-q"></div></div>
+        </div>
+      </div>
+      <div class="legend3d">
+        <span class="scale">charge <span>−</span><span class="ramp"></span><span>+</span></span>
+        <span>tubes: charge per atom · C60: its net charge</span>
+        <span>terminals and wire: illustration, the potential is imposed on every tube atom</span>
+        <span id="l-volt" class="mono"></span>
+      </div>
+      <div class="transport">
+        <button class="primary" id="play" type="button">Play</button>
+        <input type="range" id="scrub" min="0" max="0" value="0" step="1" aria-label="Trajectory frame">
+        <span class="mono muted" id="r-frame"></span>
+        <select id="speed" aria-label="Playback speed">
+          <option value="6">Slow</option><option value="14" selected>Normal</option><option value="30">Fast</option>
+        </select>
+        <button id="view-side" type="button">Side view</button>
+        <button id="view-axis" type="button">Into a tube</button>
+      </div>
+    </div>
+
+    <div class="side">
+      <div class="panel card">
+        <span class="eyebrow">Charge carried per crossing</span>
+        <div class="hero"><span class="value" id="v-q">–</span><span class="unit">e</span></div>
+        <p class="note" id="v-note"></p>
+        <span class="status" id="status"></span>
+      </div>
+      <div class="panel card">
+        <span class="eyebrow">Shuttle properties, this model</span>
+        <dl class="facts" id="facts"></dl>
+      </div>
+      <div class="panel card">
+        <span class="eyebrow">Each crossing</span>
+        <div class="tablewrap"><table class="rates" id="t-cross"></table></div>
+        <p class="note" id="t-note"></p>
+      </div>
+    </div>
+  </section>
+
+  <section class="lower">
+    <div class="panel block">
+      <h2>How it was computed</h2>
+      <ul>
+        <li><b>Geometry.</b> Each (10,10) tube is closed by half a C240 fullerene, joined ring to ring and relaxed with AIREBO. Every atom has three neighbours except the 20 at the open mouth.</li>
+        <li><b>Charges.</b> Method of moments with Gaussian charges: the tubes are held at +V/2 and −V/2. While the C60 is within <span id="m-contact"></span> Å of a tube it sits at that tube's potential; once clear, it is an isolated conductor that keeps its total charge.</li>
+        <li><b>Dynamics.</b> LAMMPS, AIREBO with van der Waals plus Coulomb, 1 fs steps. All charges are recomputed every <span id="m-update"></span> fs from the current positions.</li>
+        <li><b>Tubes.</b> Free to vibrate and deform, held only by a two-cell ring at mid-length. Against perfectly rigid caps the C60 was destroyed on impact at every voltage tried.</li>
+        <li><b>Threshold.</b> Static estimate: the voltage at which the electrostatic pull exceeds the van der Waals retention along the whole exit path, for a C60 starting at the mouth.</li>
+      </ul>
+    </div>
+    <div class="panel block">
+      <h2>What this model does not show</h2>
+      <ul>
+        <li><b>One run</b>, one voltage, started at 0 K. No statistics.</li>
+        <li><b>No field emission.</b> The C60 carries more than one electron charge in a field near 1 V/Å; a real system would leak current before that.</li>
+        <li><b>Contact is a distance threshold</b>, not a tunnelling model, and charge transfer is instantaneous.</li>
+        <li><b>The C60 speeds up from cycle to cycle.</b> This may be energy fed by the voltage source at each transfer, or an effect of the update interval. Not resolved.</li>
+        <li><b>No trapping.</b> With the voltage left on, the C60 never settles in one tube.</li>
+        <li><b>Known artefact:</b> deep inside a tube the C60 should be neutral (Faraday cage); with Gaussian charges it keeps a small charge of the opposite sign.</li>
+      </ul>
+    </div>
+  </section>
+
+  <footer>Computed with LAMMPS (AIREBO) and a NumPy charge solver. Mustapha Hamdi · <span class="mono">mustapha.hamdi@innodeep.net</span></footer>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+const DATA = /*__DATA__*/null;
+const $ = id => document.getElementById(id);
+const Q = new URLSearchParams(location.search), CAP = Q.has("capture");
+if (CAP) document.documentElement.classList.add("capture");
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const fx = (v, d) => (v == null || !isFinite(v)) ? "–" : Number(v).toFixed(d).replace("-", "−");
+const sgn = (v, d) => (v > 0 ? "+" : "") + fx(v, d);
+const R = DATA.run, T = DATA.traj, W = DATA.well, X = DATA.crossings;
+const half = R.gap_A / 2;
+
+/* ---------- colonne de droite ---------- */
+const qs = X.map(c => Math.abs(c.q_e));
+$("v-q").textContent = qs.length ? fx(Math.min(...qs), 2) + " to " + fx(Math.max(...qs), 2) : "–";
+$("v-note").textContent = X.length + " crossings in " + fx(R.simulated_ps, 0) + " ps at " + fx(R.voltage_V, 0) + " V" +
+  (DATA.period_ps ? ", one round trip every " + fx(DATA.period_ps, 1) + " ps (about " + fx(1000 / DATA.period_ps, 0) + " GHz)." : ".");
+const st = $("status"), warn = DATA.warnings || [];
+st.className = "status " + (warn.length || !R.c60_intact ? "warn" : "ok");
+st.textContent = !R.c60_intact ? "The C60 did not survive the run" : warn.length ? warn.length + " plausibility warning(s)" : "C60 intact · all plausibility checks passed";
+const facts = [
+  ["Static ejection threshold", fx(DATA.threshold.threshold_V, 1) + " V"],
+  ["Voltage of this run", fx(R.voltage_V, 1) + " V"],
+  ["C60 binding in the tube", fx(W.binding_eV, 2) + " eV"],
+  ["Retention force at the mouth", fx(W.retention_max_nN, 2) + " nN"],
+  ["Charge picked up at release", fx(Math.abs(DATA.threshold.q_ball_flight_e_per_V), 3) + " e per V"],
+  ["First crossing", fx(R.flight_ps, 2) + " ps for " + fx(R.gap_A / 10, 0) + " nm"],
+  ["Peak speed", fx(R.max_speed_m_s / 1000, 2) + " km/s"],
+  ["Peak kinetic energy", fx(R.max_kinetic_eV, 0) + " eV"],
+  ["Charge drift in free flight", R.charge_drift_e != null ? R.charge_drift_e.toExponential(0).replace("-", "−") + " e" : "–"],
+  ["Atoms", T.atoms + " (C60: " + T.n_ball + ")"],
+];
+$("facts").innerHTML = facts.map(f => "<div><dt>" + f[0] + "</dt><dd>" + f[1] + "</dd></div>").join("");
+$("m-contact").textContent = fx(DATA.contact_A, 1);
+$("m-update").textContent = R.update;
+$("l-volt").textContent = fx(R.voltage_V, 0) + " V between the tubes";
+$("t-cross").innerHTML = "<tr><th>#</th><th>Leaves</th><th>Arrives</th><th>To</th><th>Charge</th></tr>" +
+  X.map((c, i) => "<tr><td>" + (i + 1) + "</td><td>" + fx(c.release_ps, 1) + " ps</td><td>" + fx(c.arrival_ps, 1) + " ps</td><td>" +
+    c.to + "</td><td>" + sgn(c.q_e, 2) + " e</td></tr>").join("");
+$("t-note").textContent = "The C60 always carries the sign of the tube it has just left.";
+
+/* ---------- courbes synchronisees ---------- */
+const hairs = [];
+function chart(host, ys, o) {
+  const w = 440, h = o.h || 200, m = { l: 40, r: 8, t: 14, b: 24 }, xs = R.time_ps;
+  const x0 = 0, x1 = xs[xs.length - 1], y0 = o.min, y1 = o.max;
+  const px = v => m.l + (v - x0) / (x1 - x0) * (w - m.l - m.r), py = v => h - m.b - (v - y0) / (y1 - y0) * (h - m.t - m.b);
+  let s = '<svg viewBox="0 0 ' + w + " " + h + '" role="img" aria-label="' + o.label + '">';
+  for (const b of o.bands || []) s += '<rect class="bandr" x="' + m.l + '" width="' + (w - m.l - m.r) + '" y="' + py(b[1]) + '" height="' + (py(b[0]) - py(b[1])) + '"/>';
+  /* grille legere : une ligne par graduation, dans les deux sens */
+  for (const t of o.ticks) if (t !== 0) s += '<line class="grid" x1="' + m.l + '" x2="' + (w - m.r) + '" y1="' + py(t) + '" y2="' + py(t) + '"/>';
+  for (let t = o.xstep; t <= x1 + 1e-9; t += o.xstep) s += '<line class="grid" y1="' + m.t + '" y2="' + (h - m.b) + '" x1="' + px(t) + '" x2="' + px(t) + '"/>';
+  /* courbe coloree par le signe : rouge au-dessus de zero, bleu en dessous, comme les atomes de la scene */
+  if (o.signed) s += '<defs><linearGradient id="sg" gradientUnits="userSpaceOnUse" x1="0" x2="0" y1="' + py(y1) + '" y2="' + py(y0) + '">'
+    + '<stop offset="0" style="stop-color: var(--pos)"/><stop offset="0.47" style="stop-color: var(--pos)"/><stop offset="0.5" style="stop-color: var(--bond)"/>'
+    + '<stop offset="0.53" style="stop-color: var(--neg)"/><stop offset="1" style="stop-color: var(--neg)"/></linearGradient></defs>';
+  s += '<line class="zero" x1="' + m.l + '" x2="' + (w - m.r) + '" y1="' + py(0) + '" y2="' + py(0) + '"/>';
+  s += '<path class="axis" d="M' + m.l + " " + m.t + "V" + (h - m.b) + "H" + (w - m.r) + '"/>';
+  for (const t of o.ticks) s += '<text x="' + (m.l - 6) + '" y="' + (py(t) + 3.5) + '" text-anchor="end">' + fx(t, o.dec) + "</text>";
+  for (let t = 0; t <= x1 + 1e-9; t += o.xstep) s += '<text x="' + px(t) + '" y="' + (h - m.b + 14) + '" text-anchor="middle">' + t + "</text>";
+  s += '<text x="' + (w - m.r) + '" y="' + (h - 2) + '" text-anchor="end">time (ps)</text><text x="' + m.l + '" y="' + (m.t - 1) + '" text-anchor="start" dy="-1">' + o.unit + "</text>";
+  s += '<path class="s1"' + (o.signed ? ' style="stroke: url(#sg)"' : "") + ' d="' + xs.map((x, i) => (i ? "L" : "M") + px(x).toFixed(1) + " " + py(ys[i]).toFixed(1)).join("") + '"/>';
+  s += '<line class="hair" y1="' + m.t + '" y2="' + (h - m.b) + '" x1="0" x2="0"/><circle class="m1" r="4.5" cx="0" cy="0"/></svg>';
+  host.innerHTML = s;
+  const hair = host.querySelector(".hair"), dot = host.querySelector(".m1");
+  hairs.push(t => { let i = 0; while (i < xs.length - 1 && xs[i + 1] <= t) i++;
+    hair.setAttribute("x1", px(t)); hair.setAttribute("x2", px(t)); dot.setAttribute("cx", px(t)); dot.setAttribute("cy", py(ys[i]));
+    if (o.signed) dot.style.fill = "var(" + (ys[i] > 0.05 ? "--pos" : ys[i] < -0.05 ? "--neg" : "--bond") + ")"; });
+}
+const zmax = Math.ceil((Math.max(...R.z_A.map(Math.abs)) + 8) / 10) * 10, qmaxT = Math.ceil(Math.max(...R.q_ball_e.map(Math.abs)) * 2) / 2;
+chart($("o-z"), R.z_A, { h: 172, min: -zmax, max: zmax, ticks: [-zmax, -zmax / 2, 0, zmax / 2, zmax], dec: 0, unit: "z (Å)", xstep: 5,
+  bands: [[half, zmax], [-zmax, -half]], label: "Axial position of the C60 centre versus time" });
+chart($("o-q"), R.q_ball_e, { h: 172, signed: true, min: -qmaxT, max: qmaxT, ticks: [-qmaxT, -qmaxT / 2, 0, qmaxT / 2, qmaxT], dec: 1, unit: "charge (e)", xstep: 5,
+  label: "Net charge on the C60 versus time" });
+
+/* ---------- transport ---------- */
+const playBtn = $("play"), scrub = $("scrub"), NF = T.frames;
+let cur = 0, playing = false, acc = 0, last = 0, draw3d = () => {};
+scrub.max = NF - 1;
+function seriesAt(t) { const xs = R.time_ps; let i = 0; while (i < xs.length - 1 && xs[i + 1] <= t) i++; return i; }
+function show(f) {
+  cur = f; scrub.value = f;
+  const t = T.frame_ps[f], i = seriesAt(t), l = R.link[i];
+  $("r-q").textContent = sgn(R.q_ball_e[i], 2) + " e";
+  $("r-time").textContent = "t = " + fx(t, 2) + " ps";
+  $("r-where").textContent = l === "-" ? "free flight, charge conserved" : "in contact with the " + (l === "L" ? "left" : "right") + " tube";
+  $("r-frame").textContent = "frame " + (f + 1) + " / " + NF;
+  for (const h of hairs) h(t);
+  draw3d(f);
+}
+function setPlaying(on) { playing = on; playBtn.textContent = on ? "Pause" : "Play"; if (on) { last = performance.now(); requestAnimationFrame(tick); } }
+function tick(now) {
+  if (!playing) return;
+  acc += (now - last) / 1000 * Number($("speed").value); last = now;
+  if (acc >= 1) { const step = Math.floor(acc); acc -= step; show((cur + step) % NF); }
+  requestAnimationFrame(tick);
+}
+playBtn.addEventListener("click", () => setPlaying(!playing));
+scrub.addEventListener("input", () => { setPlaying(false); show(Number(scrub.value)); });
+
+/* ---------- scene 3D ---------- */
+(function () {
+  const stage = $("stage"), canvas = $("gl");
+  let renderer;
+  try { if (!window.THREE) throw 0; renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: CAP }); }
+  catch (e) {
+    canvas.hidden = true;
+    stage.appendChild(Object.assign(document.createElement("div"), { className: "fallback",
+      textContent: "The 3D view could not start in this browser (WebGL unavailable). The numbers and curves are unaffected." }));
+    return;
+  }
+  const dec = b64 => new Int16Array(Uint8Array.from(atob(b64), c => c.charCodeAt(0)).buffer);
+  const xyz = dec(T.xyz), qv = dec(T.q), N = T.atoms, NT = N - T.n_ball;
+  /* axe des tubes (z de LAMMPS) place a l'horizontale : (X, Y, Z) = (z, x, y) */
+  const at = (f, i) => { const o = (f * N + i) * 3; return [xyz[o + 2] / 100, xyz[o] / 100, xyz[o + 1] / 100]; };
+  const qAt = (f, i) => qv[f * N + i] / T.q_scale;
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  const scene = new THREE.Scene(), cam = new THREE.PerspectiveCamera(28, 16 / 9, 1, 5000);
+  cam.up.set(0, 0, 1);
+  scene.add(new THREE.HemisphereLight(0xffffff, 0x556070, 0.95));
+  const sun = new THREE.DirectionalLight(0xffffff, 0.6); sun.position.set(0.3, -0.7, 1); scene.add(sun);
+
+  /* liaisons de la premiere image, listees une fois ; une liaison etiree au-dela de 2 A n'est plus dessinee */
+  const P0 = []; for (let i = 0; i < N; i++) P0.push(at(0, i));
+  const order = P0.map((p, i) => i).sort((a, b) => P0[a][0] - P0[b][0]), bl = [];
+  for (let a = 0; a < N; a++) for (let b = a + 1; b < N; b++) {
+    const i = order[a], j = order[b], dx = P0[j][0] - P0[i][0]; if (dx > 1.8) break;
+    const dy = P0[i][1] - P0[j][1], dz = P0[i][2] - P0[j][2]; if (dx * dx + dy * dy + dz * dz < 3.24) bl.push(i, j); }
+  const NB = bl.length / 2;
+  const bonds = new THREE.InstancedMesh(new THREE.CylinderGeometry(1, 1, 1, 6, 1, true), new THREE.MeshLambertMaterial(), NB);
+  const atoms = new THREE.InstancedMesh(new THREE.SphereGeometry(0.46, 14, 10), new THREE.MeshLambertMaterial(), T.n_ball);
+  atoms.frustumCulled = bonds.frustumCulled = false;
+  scene.add(bonds, atoms);
+  /* bornes de la source de tension : ILLUSTRATION. Le calcul impose le potentiel sur chaque atome des tubes,
+     il ne contient ni electrode ni fil. Plaque + derriere la calotte gauche, plaque - derriere la droite. */
+  let xEnd = 0; for (let i = 0; i < N; i++) xEnd = Math.max(xEnd, Math.abs(P0[i][0]));
+  const xPlate = xEnd + 4, drop = -17;
+  const plateGeo = new THREE.BoxGeometry(3, 21, 21);
+  const plates = [-1, 1].map(s => { const m = new THREE.Mesh(plateGeo, new THREE.MeshLambertMaterial({ transparent: true, opacity: 0.88 }));
+    m.position.set(s * xPlate, 0, 0); scene.add(m); return m; });
+  const wire = new THREE.Line(new THREE.BufferGeometry().setFromPoints(
+    [[-xPlate, 0, -10.5], [-xPlate, 0, drop], [-7, 0, drop], [7, 0, drop], [xPlate, 0, drop], [xPlate, 0, -10.5]].map(p => new THREE.Vector3(...p))),
+    new THREE.LineBasicMaterial());
+  scene.add(wire);
+  /* pile au milieu du fil : grand trait cote +, petit trait cote - */
+  const cell = [[-1.2, 5.5], [1.2, 3]].map(([x, h]) => { const m = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.7, h), new THREE.MeshLambertMaterial());
+    m.position.set(x, 0, drop); scene.add(m); return m; });
+  const gapCover = new THREE.Mesh(new THREE.BoxGeometry(1.7, 0.5, 0.9), new THREE.MeshBasicMaterial()); gapCover.position.set(0, 0, drop); scene.add(gapCover);
+  function label(text, x, z, size) {
+    const sp = new THREE.Sprite(new THREE.SpriteMaterial({ depthTest: false, transparent: true }));
+    sp.position.set(x, 0, z); sp.scale.set(size * (text.length > 1 ? 2.6 : 1), size, 1); sp.userData.text = text; scene.add(sp); return sp;
+  }
+  const labels = [label("+", -xPlate, 15.5, 8), label("−", xPlate, 15.5, 8), label(fx(R.voltage_V, 0) + " V", 0, drop - 6, 5.5)];
+  function paintLabel(sp, color) {
+    const c = document.createElement("canvas"), wide = sp.userData.text.length > 1; c.width = wide ? 333 : 128; c.height = 128;
+    const g = c.getContext("2d"); g.fillStyle = color; g.textAlign = "center"; g.textBaseline = "middle";
+    g.font = (wide ? "500 76px " : "600 120px ") + (css("--mono") || "monospace"); g.fillText(sp.userData.text, c.width / 2, 68);
+    if (sp.material.map) sp.material.map.dispose();
+    sp.material.map = new THREE.CanvasTexture(c); sp.material.needsUpdate = true;
+  }
+  let qTube = 0; for (let k = 0; k < NF * N; k += 97) { const i = k % N; if (i < NT) qTube = Math.max(qTube, Math.abs(qv[k] / T.q_scale)); }
+  const qBall = Math.max(...R.q_ball_e.map(Math.abs)) || 1;
+  const col = {}, tmp = new THREE.Color(), dummy = new THREE.Object3D(), up = new THREE.Vector3(0, 1, 0), dir = new THREE.Vector3();
+  const shade = t => { t = Math.max(-1, Math.min(1, t)); return tmp.copy(col.bond).lerp(t >= 0 ? col.pos : col.neg, Math.pow(Math.abs(t), 0.6)); };
+  function theme() {
+    for (const k of ["stage", "pos", "neg", "bond"]) col[k] = new THREE.Color(css("--" + k));
+    renderer.setClearColor(col.stage, 1);
+    plates[0].material.color.copy(col.pos); plates[1].material.color.copy(col.neg);
+    cell[0].material.color.copy(col.pos); cell[1].material.color.copy(col.neg);
+    wire.material.color.set(css("--muted")); gapCover.material.color.copy(col.stage);
+    paintLabel(labels[0], css("--pos")); paintLabel(labels[1], css("--neg")); paintLabel(labels[2], css("--muted"));
+    /* les couleurs d'instance doivent exister AVANT le premier rendu, sinon le shader est compile sans elles */
+    for (let k = 0; k < NB; k++) bonds.setColorAt(k, col.bond);
+    for (let i = 0; i < T.n_ball; i++) atoms.setColorAt(i, col.bond);
+    bonds.instanceColor.needsUpdate = atoms.instanceColor.needsUpdate = true;
+  }
+  draw3d = function (f) {
+    const P = []; for (let i = 0; i < N; i++) P.push(at(f, i));
+    let qb = 0; for (let i = NT; i < N; i++) qb += qAt(f, i);
+    const cb = shade(qb / qBall).clone();
+    for (let i = NT; i < N; i++) { dummy.position.set(P[i][0], P[i][1], P[i][2]); dummy.quaternion.identity(); dummy.scale.set(1, 1, 1); dummy.updateMatrix();
+      atoms.setMatrixAt(i - NT, dummy.matrix); atoms.setColorAt(i - NT, cb); }
+    atoms.instanceMatrix.needsUpdate = true; atoms.instanceColor.needsUpdate = true;
+    let n = 0;
+    for (let k = 0; k < NB; k++) {
+      const i = bl[2 * k], j = bl[2 * k + 1], a = P[i], b = P[j], dx = b[0] - a[0], dy = b[1] - a[1], dz = b[2] - a[2], len = Math.sqrt(dx * dx + dy * dy + dz * dz);
+      if (len > 2.0) continue;
+      const ball = i >= NT, r = ball ? 0.2 : 0.15;
+      dir.set(dx, dy, dz).divideScalar(len); dummy.quaternion.setFromUnitVectors(up, dir);
+      dummy.position.set(a[0] + dx / 2, a[1] + dy / 2, a[2] + dz / 2); dummy.scale.set(r, len, r); dummy.updateMatrix();
+      bonds.setMatrixAt(n, dummy.matrix);
+      bonds.setColorAt(n, ball ? cb : shade((qAt(f, i) + qAt(f, j)) / 2 / qTube));
+      n++;
+    }
+    bonds.count = n; bonds.instanceMatrix.needsUpdate = true; bonds.instanceColor.needsUpdate = true;
+    render();
+  };
+  const span = 2 * (xPlate + 3);                                 /* bornes comprises */
+  let az = Q.has("az") ? Number(Q.get("az")) : -0.22, pol = 1.2, dist = span * 1.3;
+  function render() {
+    cam.position.set(dist * Math.sin(pol) * Math.sin(az), -dist * Math.sin(pol) * Math.cos(az), dist * Math.cos(pol));
+    cam.lookAt(0, 0, 0); renderer.render(scene, cam);
+  }
+  let drag = null;
+  canvas.addEventListener("pointerdown", e => { drag = [e.clientX, e.clientY]; canvas.setPointerCapture(e.pointerId); });
+  canvas.addEventListener("pointermove", e => { if (!drag) return;
+    az -= (e.clientX - drag[0]) * 0.008; pol = Math.max(0.05, Math.min(3.09, pol - (e.clientY - drag[1]) * 0.008)); drag = [e.clientX, e.clientY]; render(); });
+  canvas.addEventListener("pointerup", () => { drag = null; });
+  canvas.addEventListener("pointercancel", () => { drag = null; });
+  canvas.addEventListener("wheel", e => { e.preventDefault(); dist = Math.max(span * 0.15, Math.min(span * 4, dist * Math.exp(e.deltaY * 0.001))); render(); }, { passive: false });
+  $("view-side").addEventListener("click", () => { az = -0.22; pol = 1.2; dist = span * 1.3; render(); });
+  $("view-axis").addEventListener("click", () => { az = -1.25; pol = 1.35; dist = span * 0.8; render(); });
+  function resize() { const w = stage.clientWidth, h = stage.clientHeight; if (!w || !h) return; renderer.setSize(w, h, false); cam.aspect = w / h;
+    /* champ horizontal constant (48 degres) : la scene garde sa largeur quelle que soit la forme du cadre */
+    cam.fov = 2 * Math.atan(Math.tan(0.417) / cam.aspect) * 180 / Math.PI;
+    /* les courbes occupent le bas de la scene : on remonte la vue de la moitie de leur hauteur */
+    cam.setViewOffset(w, h, 0, Math.round($("live").offsetHeight * 0.5), w, h);
+    cam.updateProjectionMatrix(); render(); }
+  new ResizeObserver(resize).observe(stage);
+  const retheme = () => { theme(); draw3d(cur); };
+  matchMedia("(prefers-color-scheme: dark)").addEventListener("change", retheme);
+  new MutationObserver(retheme).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+  theme(); resize();
+})();
+
+show(CAP ? Math.max(0, Math.min(NF - 1, Number(Q.get("f")) || 0)) : 0);
+if (!CAP && !matchMedia("(prefers-reduced-motion: reduce)").matches) setPlaying(true);
+</script>

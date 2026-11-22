@@ -233,6 +233,71 @@ or refute the paper's rotary motion.
 One artefact to know: with point-like charges and no dipoles, the charge alternates in sign between
 the first two rings at an open end; the per-cell average removes it.
 
+## Fullerene charge shuttle: the LLM back at the wheel
+
+`fullerene_shuttle.py` puts a C60 between two (10,10) nanotubes held at +V/2 and −V/2. At the mouth
+of one tube the C60 takes that tube's charge, is pulled across the gap, and gives the charge to the
+other tube: a nanometre-scale version of Franklin's electrostatic bell. Unlike the nanotube module,
+the charges are recomputed during the flight, every 25 fs.
+
+[![A C60 between two capped nanotubes, coloured by charge, with its position and charge against time](docs/fullerene.png)](https://hamdim99.github.io/nemotron-lammps/fullerene.html)
+
+Interactive page: https://hamdim99.github.io/nemotron-lammps/fullerene.html
+
+    python fullerene_shuttle.py well                    # van der Waals well of the C60 in the tube
+    python fullerene_shuttle.py threshold --capped --depth 0
+    python fullerene_shuttle.py fly --capped --flexible --depth 0 --volt 16 --steps 30000
+    python viewer/build_fullerene.py runs_fs            # writes docs/fullerene.html
+
+| Property | Value | How |
+|---|---|---|
+| C60 binding in a (10,10) tube | 3.20 eV | rigid scan, AIREBO with LJ |
+| Retention force at the mouth | 0.62 nN | slope of the same scan |
+| Charge taken at release | 0.082 e per volt | moment method, C60 at the tube potential |
+| Static ejection threshold, from the mouth | 14.4 V | where the pull exceeds the retention along the exit path |
+| Charge carried per crossing at 16 V | 1.25 to 1.45 e | MD, 30 ps |
+| Round trip at 16 V | 11.9 ps, about 84 GHz | same run |
+
+What the runs showed, one run each:
+
+- **Open tubes**: the C60 crosses, then leaves through the far end.
+- **Capped, perfectly rigid tubes**: the C60 is destroyed on the far cap at every voltage tried,
+  down to the threshold (12 eV at impact for a 3.2 eV well; a rigid wall absorbs nothing).
+- **Capped, flexible tubes, 16 V**: the C60 survives and shuttles, five crossings in 30 ps.
+- **Same run continued**: it does not last. The C60 drifts off the axis from about 21 ps, misses
+  the tube mouth at 31 ps, bounces between the two rims and leaves sideways. The run stops at 37 ps.
+
+The caps are half a C240 fullerene joined ring to ring to the tube and relaxed with AIREBO; every
+atom has three neighbours except the 20 at the open mouth.
+
+### The agent on this task
+
+`shuttle_agent.py` gives the LLM four bounded tools (`measure_well`, `ejection_threshold`, `fly`,
+`report`). A flight is refused until the static threshold has been computed for the same set-up,
+six flights at most per session, and the verdict of each flight is written by the code.
+
+Request, both times: *find the lowest voltage that takes the C60 from one tube to the other without
+breaking it, starting at the mouth.*
+
+| Run | Judge | What the model answered | True? |
+|---|---|---|---|
+| 1 | first version | 14.2 V, open rigid tubes, 6 ps flights | No |
+| 2 | hardened | no voltage found in six flights | Yes |
+
+In run 1 the judge had two holes: a flight cut off while the C60 was still crossing was reported as
+"not ejected", and "crossed, intact" did not require the C60 to be stopped in the arrival tube. The
+model took the easy path and the judge let it through. The hardened judge requires the C60 to be
+stopped intact in the arrival tube and names cut-off flights as such. In run 2 the model read each
+verdict and changed one parameter at a time (longer run, caps, lower voltage, flexible tubes), but
+spent three flights lowering the voltage against rigid caps and tried flexible tubes only on its
+last flight, at a voltage too close to the threshold. It reported the failure and invented no number.
+One run per version: this is an observation, not a benchmark.
+
+What this model does not show: no field emission (the C60 carries more than one electron charge in a
+field near 1 V/Å), electrical contact is a 4 Å distance threshold with instantaneous transfer, no
+dissipation into a substrate, start at 0 K. Deep inside a tube the C60 should be neutral; with
+Gaussian charges it keeps a small charge of the opposite sign.
+
 ## Limitations
 
 - **Classical potential** (Tersoff or AIREBO): values depend on the potential and are not
