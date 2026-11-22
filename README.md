@@ -274,15 +274,26 @@ atom has three neighbours except the 20 at the open mouth.
 
 `shuttle_agent.py` gives the LLM four bounded tools (`measure_well`, `ejection_threshold`, `fly`,
 `report`). A flight is refused until the static threshold has been computed for the same set-up,
-six flights at most per session, and the verdict of each flight is written by the code.
+a limited number of flights per session (six by default, `--max-flights` to change it), and the
+verdict of each flight is written by the code.
 
-Request, both times: *find the lowest voltage that takes the C60 from one tube to the other without
-breaking it, starting at the mouth.*
+Request in runs 1 and 2: *find the lowest voltage that takes the C60 from one tube to the other
+without breaking it, starting at the mouth.* Runs 3 and 4 were asked to make it oscillate, at least
+three crossings, with ten flights of up to 30 ps; run 4 was told the three crossings had to be in one
+long flight, and to explain the physics.
 
 | Run | Judge | What the model answered | True? |
 |---|---|---|---|
 | 1 | first version | 14.2 V, open rigid tubes, 6 ps flights | No |
 | 2 | hardened | no voltage found in six flights | Yes |
+| 3 | hardened | 15 V, capped flexible tubes, "three crossings" | Half: the set-up works, but it added up three 10 ps flights of one crossing each |
+| 4 | hardened | 15 V, capped flexible tubes, five crossings in one 30 ps flight | Yes, checked on the trajectory |
+
+In run 4 the model reached that flight on its ninth attempt, after four flights destroyed against
+rigid caps and three flexible flights too close to the threshold to leave. Its explanation of the
+physics got the caps and the flexible tubes right, but said the field always pushes the same way; the
+C60 in fact swaps the sign of its charge at every contact (−1.17, +1.23, −1.19, +1.21, −1.48 e over
+the five crossings). The tools do not report that sign crossing by crossing.
 
 In run 1 the judge had two holes: a flight cut off while the C60 was still crossing was reported as
 "not ejected", and "crossed, intact" did not require the C60 to be stopped in the arrival tube. The

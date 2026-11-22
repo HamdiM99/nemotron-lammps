@@ -25,7 +25,8 @@ Q_SCALE = 20000          # charges stockees en entiers 16 bits : 1 unite = 5e-5 
 AGENT_FRAMES = 70        # images gardees par vol de l'agent, tubes figes (seul le C60 est stocke image par image)
 AGENT_FRAMES_FLEX = 36   # tubes flexibles : tous les atomes sont stockes a chaque image, on en garde moins
 AGENT_DIRS = [("Run 1", "first judge", "runs_fs_agent"), ("Run 2", "hardened judge", "runs_fs_agent_v2"),
-              ("Run 3", "hardened judge, 10 flights, asked to make it oscillate", "runs_fs_agent_v3")]
+              ("Run 3", "hardened judge, 10 flights, asked to make it oscillate", "runs_fs_agent_v3"),
+              ("Run 4", "same, asked for three crossings in one long flight", "runs_fs_agent_v4")]
 
 
 def pack(arr: np.ndarray, scale: float) -> str:
@@ -115,7 +116,7 @@ def run_from_dump(steps: list, xyz: np.ndarray, q: np.ndarray, types: np.ndarray
     return run
 
 
-def agent_runs(dirs: list, flights: list) -> list:
+def agent_runs(dirs: list, flights: list, embed: bool = True) -> list:
     """Vols demandes par le LLM, lus dans trace.jsonl : parametres choisis et verdict ecrit par le code.
 
     Chaque vol qui a tourne est aussi ajoute a `flights`, avec sa trajectoire, pour etre rejoue dans la scene 3D."""
@@ -139,7 +140,7 @@ def agent_runs(dirs: list, flights: list) -> list:
                    "ps": round(a.get("steps", 8000) / 1000, 1), "crossings": r.get("crossings"), "idx": None,
                    "verdict": r.get("verdict") if r.get("ok") else "refused by the code: threshold not computed"}
             dump = Path(d) / f"{r.get('flight')}.lammpstrj"
-            if r.get("ok") and dump.exists():
+            if embed and r.get("ok") and dump.exists():
                 steps, xyz, q, types = read_dump(dump)
                 run = run_from_dump(steps, xyz, q, types, a)
                 tubes = ("capped" if row["capped"] else "open") + ", " + ("flexible" if row["flexible"] else "rigid")
@@ -155,7 +156,7 @@ def agent_runs(dirs: list, flights: list) -> list:
     return out
 
 
-def build(workdir: Path, key: str | None, long_key: str | None = None) -> dict:
+def build(workdir: Path, key: str | None, long_key: str | None = None, all_flights: bool = False) -> dict:
     res = json.loads((workdir / "results.json").read_text())
     # par defaut : le plus long des vols flexibles a calottes
     key = key or max((k for k in res if k.startswith("fly_capped_flex")), key=lambda k: res[k].get("simulated_ps", 0))
@@ -170,9 +171,22 @@ def build(workdir: Path, key: str | None, long_key: str | None = None) -> dict:
     t_miss = float(t_frames[np.argmax(off > 2.0)]) if (off > 2.0).any() else float("inf")
     for c in cross:                                              # tout ce qui part apres la premiere sortie d'axe est un rebond
         c["on_axis"] = bool(c["release_ps"] < t_miss)
-    flights = [{"label": f"Run by hand, not by the LLM: {run['voltage_V']:g} V, capped, flexible", "verdict": None, "run": run,
-                "traj": traj(steps, xyz, q, types, False, None), "crossings": cross, "period_ps": period(cross)}]
-    agent = agent_runs(AGENT_DIRS, flights)
+    shown, shown_cross, n_f = run, cross, len(steps)
+    if not all_flights:
+        # animation = l'oscillation seule : on coupe a l'arrivee de la derniere traversee dans l'axe qui ramene le C60
+        # dans son tube de depart, et la page la joue en boucle. La suite (derive, sortie) reste dans "It does not last".
+        home = "right" if run["z_A"][0] > 0 else "left"
+        back = [c["arrival_ps"] for c in cross if c["on_axis"] and c["to"] == home]
+        if back:
+            clip = back[-1]
+            n_s = int(np.searchsorted(np.array(run["time_ps"]), clip, side="right"))
+            n_f = int(np.searchsorted(t_frames, clip, side="right"))
+            shown = dict(run, clip_ps=clip, **{k: run[k][:n_s] for k in ("time_ps", "z_A", "q_ball_e", "link")})
+            shown_cross = [c for c in cross if c["arrival_ps"] <= clip]
+    flights = [{"label": f"Run by hand, not by the LLM: {run['voltage_V']:g} V, capped, flexible", "verdict": None, "run": shown,
+                "traj": traj(steps[:n_f], xyz[:n_f], q[:n_f], types, False, None), "crossings": shown_cross,
+                "period_ps": period(cross)}]
+    agent = agent_runs(AGENT_DIRS, flights, embed=all_flights)
     lk = long_key or key
     steps_l, ball = steps, xyz[:, types == 3, :].mean(axis=1)
     if lk != key:
@@ -184,6 +198,7 @@ def build(workdir: Path, key: str | None, long_key: str | None = None) -> dict:
             "off_axis_A": np.hypot(ball[:, 0], ball[:, 1]).round(2).tolist()}
     # histoire jouee par l'animation : TOUS les vols de l'agent, run apres run, dans l'ordre ou il les a demandes ;
     # le vol fait a la main (indice 0) ne vient qu'en tout dernier
+    # (option --all-flights ; par defaut l'animation ne joue que l'oscillation du vol de reference)
     story = [f["idx"] for r in agent for f in r["flights"] if f["idx"] is not None] + [0]
     story_run = None
     return {"key": key, "story": story, "story_run": story_run, "well": res.get("well", {}), "threshold": {k: v for k, v in thr.items() if k != "scan"},
@@ -196,8 +211,10 @@ if __name__ == "__main__":
     ap.add_argument("workdir")
     ap.add_argument("--run", default=None, help="cle du vol de reference dans results.json (defaut : le plus long vol flexible a calottes)")
     ap.add_argument("--long", default=None, help="cle d'un autre vol pour le bloc 'It does not last' (defaut : le vol de reference)")
+    ap.add_argument("--all-flights", action="store_true",
+                    help="l'animation rejoue aussi tous les vols de l'agent, puis le vol de reference en entier (page lourde)")
     a = ap.parse_args()
-    data = build(Path(a.workdir), a.run, a.long)
+    data = build(Path(a.workdir), a.run, a.long, a.all_flights)
     page = (HERE / "fullerene_template.html").read_text(encoding="utf-8").replace(
         "/*__DATA__*/null", json.dumps(data, ensure_ascii=False, separators=(",", ":")).replace("</", "<\\/"))
     (HERE / "fullerene_artifact.html").write_text(page, encoding="utf-8")

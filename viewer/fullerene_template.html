@@ -195,7 +195,7 @@ footer { font-size: 0.78rem; color: var(--muted) }
       <p class="note">The voltage source pays at every transfer, roughly the charge carried times the voltage crossed, and little is dissipated. That is why the charge carried grows from one crossing to the next. Not checked quantitatively.</p>
     </div>
     <div class="panel block" id="long-block">
-      <span class="eyebrow">Same run, off the axis</span>
+      <span class="eyebrow">Same run, after the part shown above</span>
       <h2>It does not last</h2>
       <div class="chart" style="padding: 0"><div id="c-off"></div></div>
       <p class="note" id="long-note"></p>
@@ -206,13 +206,15 @@ footer { font-size: 0.78rem; color: var(--muted) }
     <span class="eyebrow">LLM agent · the model proposes, the code verifies</span>
     <h2>What the LLM tried on this task</h2>
     <p class="lede">Request in runs 1 and 2: find the lowest voltage that takes the C60 from one tube to the other without breaking it, starting at the mouth.
-      Run 3 was asked to make it oscillate, at least three crossings, with ten flights of up to 30 ps.
-      Four bounded tools, and the verdict of each flight is written by the code, not by the model. The animation at the top plays every one of these flights in order, then the run done by hand.</p>
+      Runs 3 and 4 were asked to make it oscillate, at least three crossings, with ten flights of up to 30 ps; run 4 was told the three crossings had to be in one long flight.
+      Four bounded tools, and the verdict of each flight is written by the code, not by the model. The animation at the top is not one of these flights: it is the 16 V run done by hand.</p>
     <div class="agent-grid" id="agent-grid"></div>
     <p class="note"><b>Run 1</b>: the model answered 14.2 V. That was wrong, and the fault was in the judge: a flight cut off while the C60 was still crossing counted as a failure, and "crossed, intact" did not require the C60 to be stopped in the arrival tube.
       <b>Run 2</b>, judge hardened: the model read each verdict and changed one parameter at a time, ran out of flights, and reported that it had found no working voltage. It invented no number.
       <b>Run 3</b>, ten flights and asked for at least three crossings: it found the set-up that works by itself, capped flexible tubes at 15 V, and the code returned "crossed intact".
       It then flew that same flight three times, one crossing each, and reported three crossings by adding them up. It never asked for a longer flight, which was allowed and would have shown whether the C60 really oscillates.
+      <b>Run 4</b>, same budget, asked for three crossings in one long flight and for an explanation of the physics: on its ninth flight it flew capped flexible tubes at 15 V for 30 ps and the C60 made five crossings, intact. Checked independently on the trajectory.
+      Its explanation got the caps and the flexible tubes right, but missed the point that makes it oscillate: it wrote that the field always pushes the same way, whereas the C60 swaps the sign of its charge at every contact (−1.17, +1.23, −1.19, +1.21, −1.48 e over the five crossings).
       One run per version: an observation, not a benchmark.</p>
   </section>
 
@@ -274,11 +276,12 @@ function side() {
   document.querySelector(".side .card .eyebrow").textContent = "Charge carried per crossing · " + (STORY[SI] ? "this LLM flight" : "run by hand");
   $("v-q").textContent = qs.length ? (qs.length > 1 ? fx(Math.min(...qs), 2) + " to " + fx(Math.max(...qs), 2) : fx(qs[0], 2)) : "none";
   $("v-note").textContent = XA.length + " crossing" + (XA.length === 1 ? "" : "s") + (NOFF ? " on the axis, then " + NOFF + " bounces off the tube rims," : "")
-    + " in " + fx(R.simulated_ps, 0) + " ps at " + volt(R.voltage_V) + " V"
+    + " in " + fx(R.clip_ps || R.simulated_ps, 0) + " ps at " + volt(R.voltage_V) + " V"
     + (FL.period_ps ? ", one round trip every " + fx(FL.period_ps, 1) + " ps (about " + fx(1000 / FL.period_ps, 0) + " GHz)." : ".");
   const st = $("status"), warn = DATA.warnings || [];
   st.className = "status " + (VERDICT ? (FL.verdict === "crossed_intact" ? "ok" : "warn") : warn.length || ENDED ? "warn" : "ok");
   st.textContent = VERDICT ? "Verdict of the code: " + VERDICT
+    : R.clip_ps ? "C60 intact · first " + fx(R.clip_ps, 0) + " ps of a " + fx(R.simulated_ps, 0) + " ps run, what comes next is shown below"
     : ENDED ? "Run stopped at " + fx(R.simulated_ps, 0) + " ps of " + fx(R.steps / 1000, 0) + ": the C60 left the shuttle"
     : warn.length ? warn.length + " plausibility warning(s)" : "C60 intact · all plausibility checks passed";
   const facts = [
@@ -299,7 +302,9 @@ function side() {
     X.map((c, i) => "<tr><td>" + (i + 1) + "</td><td>" + fx(c.release_ps, 1) + " ps</td><td>" + fx(c.arrival_ps, 1) + " ps</td><td>" +
       c.to + (c.on_axis === false ? ", off the rim" : "") + "</td><td>" + sgn(c.q_e, 2) + " e</td></tr>").join("")
     : "<tr><td>No crossing in this flight.</td></tr>";
-  $("r-step").innerHTML = "<b>Flight " + (SI + 1) + " of " + STORY.length + "</b>" + FL.label + (VERDICT ? "<br>verdict of the code: " + VERDICT : "");
+  $("r-step").innerHTML = STORY.length === 1
+    ? "<b>" + volt(R.voltage_V) + " V, capped, flexible tubes</b>" + (R.clip_ps ? "first " + fx(R.clip_ps, 0) + " ps of the run, played in a loop" : "run by hand")
+    : "<b>Flight " + (SI + 1) + " of " + STORY.length + "</b>" + FL.label + (VERDICT ? "<br>verdict of the code: " + VERDICT : "");
 }
 
 /* ---------- courbes synchronisees ---------- */
@@ -405,9 +410,13 @@ function advance() {
   acc += Math.min(1.5, (now - last) / 1000) * Number($("speed").value); last = now;
   if (acc < 1) return;
   const step = Math.floor(acc); acc -= step;
-  if (cur + step >= NF - 1) {                      /* fin du vol : on laisse lire le verdict, puis on enchaine sur le vol suivant */
-    show(NF - 1); setPlaying(false);
-    if (SI < STORY.length - 1) nextTimer = setTimeout(() => load(SI + 1, true), 2200);
+  if (cur + step >= NF - 1) {                      /* fin du vol */
+    show(NF - 1);
+    /* lecture continue : le vol suivant demarre tout de suite, sans pause. Le verdict reste lisible, il est
+       affiche en haut a droite pendant tout le vol. Seul le dernier vol arrete la lecture. */
+    if (SI < STORY.length - 1) load(SI + 1, true);
+    else if (R.clip_ps) show(0);                   /* oscillation seule : elle tourne en boucle */
+    else setPlaying(false);
     return;
   }
   show(cur + step);
@@ -419,7 +428,8 @@ function load(si, autoplay, frame) {
   clearTimeout(nextTimer); playing = false;
   SI = Math.max(0, Math.min(STORY.length - 1, si));
   FL = FLIGHTS[STORY[SI]]; R = FL.run; T = FL.traj; X = FL.crossings; NF = T.frames;
-  ENDED = R.simulated_ps < R.steps / 1000 - 0.5;   /* le script a arrete le vol avant la duree demandee */
+  ENDED = !R.clip_ps && R.simulated_ps < R.steps / 1000 - 0.5;   /* le script a arrete le vol avant la duree demandee */
+  $("steps").style.display = $("restart").style.display = STORY.length === 1 ? "none" : "";
   VERDICT = FL.verdict ? words(FL.verdict) : null;
   scrub.max = NF - 1; acc = 0;
   side(); charts(); scene3d.load();
