@@ -64,6 +64,42 @@ def crossings(run: dict) -> list:
     return out
 
 
+def long_run(workdir: Path, res: dict, key: str) -> dict | None:
+    """Suite du meme vol : traversees et ecart du C60 a l'axe, image par image."""
+    run = res.get(key)
+    if not run or not (workdir / f"{key}.lammpstrj").exists():
+        return None
+    steps, xyz, _, types = read_dump(workdir / f"{key}.lammpstrj")
+    ball = xyz[:, types == 3, :].mean(axis=1)
+    return {"simulated_ps": run["simulated_ps"], "voltage_V": run["voltage_V"], "crossings": crossings(run),
+            "t_ps": [round(s * nt.DT_PS, 2) for s in steps],
+            "off_axis_A": np.hypot(ball[:, 0], ball[:, 1]).round(2).tolist()}
+
+
+def agent_runs(dirs: list) -> list:
+    """Vols demandes par le LLM, lus dans trace.jsonl : parametres choisis et verdict ecrit par le code."""
+    out = []
+    for label, judge, d in dirs:
+        trace = Path(d) / "trace.jsonl"
+        if not trace.exists():
+            continue
+        flights, lowest = [], None
+        for line in trace.read_text(encoding="utf-8").splitlines():
+            rec = json.loads(line)
+            if rec["type"] != "tool":
+                continue
+            if rec["name"] == "report":
+                lowest = rec["result"].get("lowest_voltage_crossed_intact_V")
+            if rec["name"] != "fly":
+                continue
+            a, r = json.loads(rec["args"]), rec["result"]
+            flights.append({"voltage_V": a.get("voltage_V"), "capped": a.get("capped", True), "flexible": a.get("flexible", False),
+                            "ps": round(a.get("steps", 8000) / 1000, 1),
+                            "verdict": r.get("verdict") if r.get("ok") else "refused by the code: threshold not computed"})
+        out.append({"label": label, "judge": judge, "flights": flights, "lowest_V": lowest})
+    return out
+
+
 def build(workdir: Path, key: str | None) -> dict:
     res = json.loads((workdir / "results.json").read_text())
     # par defaut : le plus long des vols flexibles a calottes
@@ -80,6 +116,8 @@ def build(workdir: Path, key: str | None) -> dict:
     return {"key": key, "run": run, "well": res.get("well", {}), "threshold": {k: v for k, v in thr.items() if k != "scan"},
             "crossings": cross, "period_ps": period, "warnings": res.get("warnings", []),
             "bounds": fs.BOUNDS, "contact_A": fs.CONTACT_A,
+            "long": long_run(workdir, res, key + "_200ps"),
+            "agent": agent_runs([("Run 1", "first judge", "runs_fs_agent"), ("Run 2", "hardened judge", "runs_fs_agent_v2")]),
             "traj": {"frames": len(xyz), "atoms": int(xyz.shape[1]), "n_ball": int((types == 3).sum()),
                      "n_left": int((types == 1).sum()), "frame_ps": [round(s * nt.DT_PS, 3) for s in steps],
                      "xyz": pack(xyz, 100), "q": pack(q, Q_SCALE), "q_scale": Q_SCALE}}
