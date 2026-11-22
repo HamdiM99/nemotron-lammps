@@ -76,6 +76,14 @@ def test_budget_de_vols(bench):
     assert len(bench.calls["fly"]) == sa.MAX_FLIGHTS
 
 
+def test_budget_reglable_et_annonce_au_modele(tmp_path):
+    b = sa.ShuttleBench(str(tmp_path), max_flights=10)
+    assert b.max_flights == 10
+    fly = next(x for x in sa.make_tools(10) if x["function"]["name"] == "fly")
+    assert "10 vols" in fly["function"]["description"]
+    assert f"{sa.MAX_FLIGHTS} vols" in next(x for x in sa.TOOLS if x["function"]["name"] == "fly")["function"]["description"]
+
+
 def test_dispatch_outil_inconnu_et_arguments_invalides(bench):
     assert sa.dispatch(bench, "write_lammps_input", "{}")["ok"] is False
     assert sa.dispatch(bench, "fly", "{pas du json")["ok"] is False

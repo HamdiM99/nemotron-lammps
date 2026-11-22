@@ -44,18 +44,25 @@ header { display: flex; flex-direction: column; gap: 10px }
 @media (max-width: 700px) { .stage { aspect-ratio: 1 / 1 } }
 .stage canvas { display: block; width: 100%; height: 100%; touch-action: none; cursor: grab }
 .stage canvas:active { cursor: grabbing }
-.readout { position: absolute; top: 12px; left: 14px; display: flex; flex-direction: column; gap: 2px; pointer-events: none }
+.readout { position: absolute; top: 10px; left: 14px; display: flex; flex-direction: column; gap: 2px; pointer-events: none }
 .readout .big { font: 500 1.5rem/1.1 var(--mono); font-variant-numeric: tabular-nums }
 .live { position: absolute; inset: auto 0 0 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 18px;
   padding: 18px 14px 6px; pointer-events: none;
   background: linear-gradient(to bottom, transparent, var(--stage) 30%) }
 .live .mini { padding: 0; gap: 0; display: flex; flex-direction: column }
 .live .mini .eyebrow { font-size: 0.66rem }
+.step { position: absolute; top: 10px; right: 14px; max-width: 52%; text-align: right; pointer-events: none;
+  font: 500 0.78rem/1.35 var(--body); color: var(--ink) }
+.step b { display: block; font: 500 0.68rem var(--mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted) }
 .fallback { position: absolute; inset: 0; display: grid; place-items: center; padding: 24px; text-align: center; color: var(--muted) }
 .legend3d { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 22px; padding: 10px 14px;
   font-size: 0.75rem; color: var(--muted); border-bottom: 1px solid var(--line) }
 .scale { display: inline-flex; align-items: center; gap: 8px; font-family: var(--mono) }
 .ramp { width: 110px; height: 6px; border-radius: 3px; background: linear-gradient(90deg, var(--neg), var(--bond), var(--pos)) }
+.steps { display: flex; gap: 3px; padding: 10px 14px 0 }
+.steps span { flex: 1 1 0; height: 6px; border-radius: 3px; background: var(--line) }
+.steps span.done { background: var(--muted) } .steps span.on { background: var(--accent) }
+.steps span.hand { margin-left: 6px }
 .transport { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; padding: 12px 14px }
 .transport input[type=range] { flex: 1 1 180px; min-width: 0; accent-color: var(--accent) }
 button, select { font: 500 0.82rem var(--body); color: var(--ink); background: var(--surface); border: 1px solid var(--line);
@@ -99,6 +106,8 @@ table.rates td { padding: 5px 6px 5px 0; border-bottom: 1px solid var(--line) }
 .block ul { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px }
 .block li { max-width: 68ch }
 .agent-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 430px), 1fr)); gap: 16px 28px }
+.agent-grid a { color: var(--accent); font-family: var(--body); white-space: nowrap }
+#flight { flex: 1 1 100%; min-width: 0; max-width: 100% }
 .agent-grid h3 { font: 600 0.86rem var(--display); margin: 0 0 6px }
 .agent-grid .ans { font-size: 0.8rem; margin-top: 6px }
 .v-ok { color: var(--good) } .v-bad { color: var(--bad) } .v-cut { color: var(--muted) }
@@ -118,7 +127,7 @@ footer { font-size: 0.78rem; color: var(--muted) }
 
   <section class="bench">
     <div class="panel">
-      <div class="stage" id="stage">
+      <div class="stage" id="stage" style="scroll-margin-top: 80px">
         <canvas id="gl" aria-label="3D view of a C60 fullerene shuttling between two capped nanotubes"></canvas>
         <div class="readout">
           <span class="eyebrow">Net charge on the C60</span>
@@ -126,6 +135,7 @@ footer { font-size: 0.78rem; color: var(--muted) }
           <span class="mono muted" id="r-time"></span>
           <span class="mono muted" id="r-where"></span>
         </div>
+        <div class="step" id="r-step"></div>
         <!-- les deux courbes vivent dans la scene, sous les tubes, avec un curseur qui suit l'animation -->
         <div class="live" id="live">
           <div class="chart mini"><span class="eyebrow">Position of the C60 along the axis</span><div id="o-z"></div></div>
@@ -138,6 +148,7 @@ footer { font-size: 0.78rem; color: var(--muted) }
         <span>terminals and wire: illustration, the potential is imposed on every tube atom</span>
         <span id="l-volt" class="mono"></span>
       </div>
+      <div class="steps" id="steps" role="img" aria-label="Flights of the story: done, playing, to come"></div>
       <div class="transport">
         <button class="primary" id="play" type="button">Play</button>
         <input type="range" id="scrub" min="0" max="0" value="0" step="1" aria-label="Trajectory frame">
@@ -145,6 +156,7 @@ footer { font-size: 0.78rem; color: var(--muted) }
         <select id="speed" aria-label="Playback speed">
           <option value="6">Slow</option><option value="14" selected>Normal</option><option value="30">Fast</option>
         </select>
+        <button id="restart" type="button">Restart from flight 1</button>
         <button id="view-side" type="button">Side view</button>
         <button id="view-axis" type="button">Into a tube</button>
       </div>
@@ -183,7 +195,7 @@ footer { font-size: 0.78rem; color: var(--muted) }
       <p class="note">The voltage source pays at every transfer, roughly the charge carried times the voltage crossed, and little is dissipated. That is why the charge carried grows from one crossing to the next. Not checked quantitatively.</p>
     </div>
     <div class="panel block" id="long-block">
-      <span class="eyebrow">Same run, continued</span>
+      <span class="eyebrow">Same run, off the axis</span>
       <h2>It does not last</h2>
       <div class="chart" style="padding: 0"><div id="c-off"></div></div>
       <p class="note" id="long-note"></p>
@@ -193,11 +205,15 @@ footer { font-size: 0.78rem; color: var(--muted) }
   <section class="panel block" id="agent-block">
     <span class="eyebrow">LLM agent · the model proposes, the code verifies</span>
     <h2>What the LLM tried on this task</h2>
-    <p class="lede">Request, both times: find the lowest voltage that takes the C60 from one tube to the other without breaking it, starting at the mouth.
-      Four bounded tools, six flights per session, and the verdict of each flight is written by the code, not by the model.</p>
+    <p class="lede">Request in runs 1 and 2: find the lowest voltage that takes the C60 from one tube to the other without breaking it, starting at the mouth.
+      Run 3 was asked to make it oscillate, at least three crossings, with ten flights of up to 30 ps.
+      Four bounded tools, and the verdict of each flight is written by the code, not by the model. The animation at the top plays every one of these flights in order, then the run done by hand.</p>
     <div class="agent-grid" id="agent-grid"></div>
     <p class="note"><b>Run 1</b>: the model answered 14.2 V. That was wrong, and the fault was in the judge: a flight cut off while the C60 was still crossing counted as a failure, and "crossed, intact" did not require the C60 to be stopped in the arrival tube.
-      <b>Run 2</b>, judge hardened: the model read each verdict and changed one parameter at a time, ran out of flights, and reported that it had found no working voltage. It invented no number. One run per version: an observation, not a benchmark.</p>
+      <b>Run 2</b>, judge hardened: the model read each verdict and changed one parameter at a time, ran out of flights, and reported that it had found no working voltage. It invented no number.
+      <b>Run 3</b>, ten flights and asked for at least three crossings: it found the set-up that works by itself, capped flexible tubes at 15 V, and the code returned "crossed intact".
+      It then flew that same flight three times, one crossing each, and reported three crossings by adding them up. It never asked for a longer flight, which was allowed and would have shown whether the C60 really oscillates.
+      One run per version: an observation, not a benchmark.</p>
   </section>
 
   <section class="lower">
@@ -236,43 +252,60 @@ if (CAP) document.documentElement.classList.add("capture");
 const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
 const fx = (v, d) => (v == null || !isFinite(v)) ? "–" : Number(v).toFixed(d).replace("-", "−");
 const sgn = (v, d) => (v > 0 ? "+" : "") + fx(v, d);
-const R = DATA.run, T = DATA.traj, W = DATA.well, X = DATA.crossings;
-const half = R.gap_A / 2;
+const volt = v => fx(v, 2).replace(/\.?0+$/, "");
+const words = v => v.replace(/_/g, " ");
 
-/* ---------- colonne de droite ---------- */
-const qs = X.map(c => Math.abs(c.q_e));
-$("v-q").textContent = qs.length ? fx(Math.min(...qs), 2) + " to " + fx(Math.max(...qs), 2) : "–";
-$("v-note").textContent = X.length + " crossings in " + fx(R.simulated_ps, 0) + " ps at " + fx(R.voltage_V, 0) + " V" +
-  (DATA.period_ps ? ", one round trip every " + fx(DATA.period_ps, 1) + " ps (about " + fx(1000 / DATA.period_ps, 0) + " GHz)." : ".");
-const st = $("status"), warn = DATA.warnings || [];
-st.className = "status " + (warn.length || !R.c60_intact ? "warn" : "ok");
-st.textContent = !R.c60_intact ? "The C60 did not survive the run" : warn.length ? warn.length + " plausibility warning(s)" : "C60 intact · all plausibility checks passed";
-const facts = [
-  ["Static ejection threshold", fx(DATA.threshold.threshold_V, 1) + " V"],
-  ["Voltage of this run", fx(R.voltage_V, 1) + " V"],
-  ["C60 binding in the tube", fx(W.binding_eV, 2) + " eV"],
-  ["Retention force at the mouth", fx(W.retention_max_nN, 2) + " nN"],
-  ["Charge picked up at release", fx(Math.abs(DATA.threshold.q_ball_flight_e_per_V), 3) + " e per V"],
-  ["First crossing", fx(R.flight_ps, 2) + " ps for " + fx(R.gap_A / 10, 0) + " nm"],
-  ["Peak speed", fx(R.max_speed_m_s / 1000, 2) + " km/s"],
-  ["Peak kinetic energy", fx(R.max_kinetic_eV, 0) + " eV"],
-  ["Charge drift in free flight", R.charge_drift_e != null ? R.charge_drift_e.toExponential(0).replace("-", "−") + " e" : "–"],
-  ["Atoms", T.atoms + " (C60: " + T.n_ball + ")"],
-];
-$("facts").innerHTML = facts.map(f => "<div><dt>" + f[0] + "</dt><dd>" + f[1] + "</dd></div>").join("");
+/* L'animation raconte tout depuis le debut, sans rien a choisir : chaque vol demande par le LLM, run apres run,
+   dans l'ordre ou il les a demandes ; le vol fait a la main ne vient qu'en tout dernier. STORY = indices de vols. */
+const FLIGHTS = DATA.flights, STORY = (DATA.story && DATA.story.length) ? DATA.story : [0], W = DATA.well;
+let SI = 0, FL, R, T, X, NF = 1, ENDED = false, VERDICT = null;
+let cur = 0, playing = false, acc = 0, last = 0, nextTimer = 0, hairs = [], draw3d = () => {};
+const playBtn = $("play"), scrub = $("scrub");
+
+/* ---------- textes fixes ---------- */
 $("m-contact").textContent = fx(DATA.contact_A, 1);
-$("m-update").textContent = R.update;
-$("l-volt").textContent = fx(R.voltage_V, 0) + " V between the tubes";
-$("t-cross").innerHTML = "<tr><th>#</th><th>Leaves</th><th>Arrives</th><th>To</th><th>Charge</th></tr>" +
-  X.map((c, i) => "<tr><td>" + (i + 1) + "</td><td>" + fx(c.release_ps, 1) + " ps</td><td>" + fx(c.arrival_ps, 1) + " ps</td><td>" +
-    c.to + "</td><td>" + sgn(c.q_e, 2) + " e</td></tr>").join("");
+$("m-update").textContent = FLIGHTS[0].run.update;
 $("t-note").textContent = "The C60 always carries the sign of the tube it has just left.";
 
+/* ---------- colonne de droite : chiffres du vol affiche ---------- */
+function side() {
+  const XA = X.filter(c => c.on_axis !== false), NOFF = X.length - XA.length;   /* traversees dans l'axe / rebonds sur les bords */
+  const qs = XA.map(c => Math.abs(c.q_e));
+  document.querySelector(".side .card .eyebrow").textContent = "Charge carried per crossing · " + (STORY[SI] ? "this LLM flight" : "run by hand");
+  $("v-q").textContent = qs.length ? (qs.length > 1 ? fx(Math.min(...qs), 2) + " to " + fx(Math.max(...qs), 2) : fx(qs[0], 2)) : "none";
+  $("v-note").textContent = XA.length + " crossing" + (XA.length === 1 ? "" : "s") + (NOFF ? " on the axis, then " + NOFF + " bounces off the tube rims," : "")
+    + " in " + fx(R.simulated_ps, 0) + " ps at " + volt(R.voltage_V) + " V"
+    + (FL.period_ps ? ", one round trip every " + fx(FL.period_ps, 1) + " ps (about " + fx(1000 / FL.period_ps, 0) + " GHz)." : ".");
+  const st = $("status"), warn = DATA.warnings || [];
+  st.className = "status " + (VERDICT ? (FL.verdict === "crossed_intact" ? "ok" : "warn") : warn.length || ENDED ? "warn" : "ok");
+  st.textContent = VERDICT ? "Verdict of the code: " + VERDICT
+    : ENDED ? "Run stopped at " + fx(R.simulated_ps, 0) + " ps of " + fx(R.steps / 1000, 0) + ": the C60 left the shuttle"
+    : warn.length ? warn.length + " plausibility warning(s)" : "C60 intact · all plausibility checks passed";
+  const facts = [
+    ["Static ejection threshold", fx(DATA.threshold.threshold_V, 1) + " V"],
+    ["Voltage of this flight", volt(R.voltage_V) + " V"],
+    ["Tubes", (R.capped ? "capped" : "open") + ", " + (R.flexible ? "flexible" : "rigid")],
+    ["C60 binding in the tube", fx(W.binding_eV, 2) + " eV"],
+    ["Charge picked up at release", fx(Math.abs(DATA.threshold.q_ball_flight_e_per_V), 3) + " e per V"],
+    ["First crossing", R.flight_ps != null ? fx(R.flight_ps, 2) + " ps for " + fx(R.gap_A / 10, 0) + " nm" : "none"],
+    ["Peak speed", fx(R.max_speed_m_s / 1000, 2) + " km/s"],
+    ["Peak kinetic energy", fx(R.max_kinetic_eV, 0) + " eV"],
+    ["Charge drift in free flight", R.charge_drift_e != null ? R.charge_drift_e.toExponential(0).replace("-", "−") + " e" : "–"],
+    ["Atoms", T.atoms + " (C60: " + T.n_ball + ")"],
+  ];
+  $("facts").innerHTML = facts.map(f => "<div><dt>" + f[0] + "</dt><dd>" + f[1] + "</dd></div>").join("");
+  $("l-volt").textContent = volt(R.voltage_V) + " V between the tubes";
+  $("t-cross").innerHTML = X.length ? "<tr><th>#</th><th>Leaves</th><th>Arrives</th><th>To</th><th>Charge</th></tr>" +
+    X.map((c, i) => "<tr><td>" + (i + 1) + "</td><td>" + fx(c.release_ps, 1) + " ps</td><td>" + fx(c.arrival_ps, 1) + " ps</td><td>" +
+      c.to + (c.on_axis === false ? ", off the rim" : "") + "</td><td>" + sgn(c.q_e, 2) + " e</td></tr>").join("")
+    : "<tr><td>No crossing in this flight.</td></tr>";
+  $("r-step").innerHTML = "<b>Flight " + (SI + 1) + " of " + STORY.length + "</b>" + FL.label + (VERDICT ? "<br>verdict of the code: " + VERDICT : "");
+}
+
 /* ---------- courbes synchronisees ---------- */
-const hairs = [];
 function chart(host, ys, o) {
   const w = 440, h = o.h || 200, m = { l: 40, r: 8, t: 14, b: 24 }, xs = R.time_ps;
-  const x0 = 0, x1 = xs[xs.length - 1], y0 = o.min, y1 = o.max;
+  const x0 = 0, x1 = xs[xs.length - 1] || 1, y0 = o.min, y1 = o.max;
   const px = v => m.l + (v - x0) / (x1 - x0) * (w - m.l - m.r), py = v => h - m.b - (v - y0) / (y1 - y0) * (h - m.t - m.b);
   let s = '<svg viewBox="0 0 ' + w + " " + h + '" role="img" aria-label="' + o.label + '">';
   for (const b of o.bands || []) s += '<rect class="bandr" x="' + m.l + '" width="' + (w - m.l - m.r) + '" y="' + py(b[1]) + '" height="' + (py(b[0]) - py(b[1])) + '"/>';
@@ -286,8 +319,9 @@ function chart(host, ys, o) {
   s += '<line class="zero" x1="' + m.l + '" x2="' + (w - m.r) + '" y1="' + py(0) + '" y2="' + py(0) + '"/>';
   s += '<path class="axis" d="M' + m.l + " " + m.t + "V" + (h - m.b) + "H" + (w - m.r) + '"/>';
   for (const t of o.ticks) s += '<text x="' + (m.l - 6) + '" y="' + (py(t) + 3.5) + '" text-anchor="end">' + fx(t, o.dec) + "</text>";
-  for (let t = 0; t <= x1 + 1e-9; t += o.xstep) s += '<text x="' + px(t) + '" y="' + (h - m.b + 14) + '" text-anchor="middle">' + t + "</text>";
-  s += '<text x="' + (w - m.r) + '" y="' + (h - 2) + '" text-anchor="end">time (ps)</text><text x="' + m.l + '" y="' + (m.t - 1) + '" text-anchor="start" dy="-1">' + o.unit + "</text>";
+  /* l'unite du temps est portee par la premiere graduation, pour ne pas chevaucher la derniere */
+  for (let t = 0; t <= x1 + 1e-9; t += o.xstep) s += '<text x="' + px(t) + '" y="' + (h - m.b + 14) + '" text-anchor="' + (t ? "middle" : "start") + '">' + (t ? t : "0 ps") + "</text>";
+  s += '<text x="' + m.l + '" y="' + (m.t - 1) + '" text-anchor="start" dy="-1">' + o.unit + "</text>";
   s += '<path class="s1"' + (o.signed ? ' style="stroke: url(#sg)"' : "") + ' d="' + xs.map((x, i) => (i ? "L" : "M") + px(x).toFixed(1) + " " + py(ys[i]).toFixed(1)).join("") + '"/>';
   s += '<line class="hair" y1="' + m.t + '" y2="' + (h - m.b) + '" x1="0" x2="0"/><circle class="m1" r="4.5" cx="0" cy="0"/></svg>';
   host.innerHTML = s;
@@ -296,13 +330,17 @@ function chart(host, ys, o) {
     hair.setAttribute("x1", px(t)); hair.setAttribute("x2", px(t)); dot.setAttribute("cx", px(t)); dot.setAttribute("cy", py(ys[i]));
     if (o.signed) dot.style.fill = "var(" + (ys[i] > 0.05 ? "--pos" : ys[i] < -0.05 ? "--neg" : "--bond") + ")"; });
 }
-const zmax = Math.ceil((Math.max(...R.z_A.map(Math.abs)) + 8) / 10) * 10, qmaxT = Math.ceil(Math.max(...R.q_ball_e.map(Math.abs)) * 2) / 2;
-chart($("o-z"), R.z_A, { h: 172, min: -zmax, max: zmax, ticks: [-zmax, -zmax / 2, 0, zmax / 2, zmax], dec: 0, unit: "z (Å)", xstep: 5,
-  bands: [[half, zmax], [-zmax, -half]], label: "Axial position of the C60 centre versus time" });
-chart($("o-q"), R.q_ball_e, { h: 172, signed: true, min: -qmaxT, max: qmaxT, ticks: [-qmaxT, -qmaxT / 2, 0, qmaxT / 2, qmaxT], dec: 1, unit: "charge (e)", xstep: 5,
-  label: "Net charge on the C60 versus time" });
+function charts() {
+  hairs = [];
+  const half = R.gap_A / 2, XS = R.simulated_ps > 20 ? 5 : R.simulated_ps > 8 ? 2 : 1;
+  const zmax = Math.ceil((Math.max(...R.z_A.map(Math.abs)) + 8) / 10) * 10, qmaxT = Math.max(0.5, Math.ceil(Math.max(...R.q_ball_e.map(Math.abs)) * 2) / 2);
+  chart($("o-z"), R.z_A, { h: 172, min: -zmax, max: zmax, ticks: [-zmax, -zmax / 2, 0, zmax / 2, zmax], dec: 0, unit: "z (Å)", xstep: XS,
+    bands: [[half, zmax], [-zmax, -half]], label: "Axial position of the C60 centre versus time" });
+  chart($("o-q"), R.q_ball_e, { h: 172, signed: true, min: -qmaxT, max: qmaxT, ticks: [-qmaxT, -qmaxT / 2, 0, qmaxT / 2, qmaxT], dec: 1, unit: "charge (e)", xstep: XS,
+    label: "Net charge on the C60 versus time" });
+}
 
-/* ---------- suite du vol : ecart a l'axe ---------- */
+/* ---------- suite du vol fait a la main : ecart a l'axe ---------- */
 (function () {
   const Lg = DATA.long;
   if (!Lg) { $("long-block").hidden = true; return; }
@@ -315,51 +353,91 @@ chart($("o-q"), R.q_ball_e, { h: 172, signed: true, min: -qmaxT, max: qmaxT, tic
   g += '<path class="axis" d="M' + m.l + " " + m.t + "V" + (h - m.b) + "H" + (w - m.r) + '"/><text x="' + (m.l + w - m.r) / 2 + '" y="' + (h - 1) + '" text-anchor="middle">time (ps)</text><text x="' + m.l + '" y="' + (m.t - 2) + '">distance from the axis (Å)</text>';
   g += '<path class="s1" d="' + xs.map((x, i) => (i ? "L" : "M") + px(x).toFixed(1) + " " + py(ys[i]).toFixed(1)).join("") + '"/></svg>';
   $("c-off").innerHTML = g;
-  const drift = xs[ys.findIndex(v => v > 0.4)], miss = xs[ys.findIndex(v => v > 2)], full = Lg.crossings.filter(c => c.release_ps < miss).length;
-  $("long-note").textContent = "The same " + fx(Lg.voltage_V, 0) + " V run, asked for 200 ps, stopped at " + fx(Lg.simulated_ps, 0) + " ps. After " + full
-    + " full crossings the C60 has drifted off the axis (from about " + fx(drift, 0) + " ps), misses the tube mouth at about " + fx(miss, 0)
-    + " ps, bounces between the two rims carrying up to " + fx(Math.max(...Lg.crossings.map(c => Math.abs(c.q_e))), 1)
-    + " e, and leaves sideways. The tubes hold. One run: another seed could drift sooner, later or not at all.";
+  const iD = ys.findIndex(v => v > 0.4), iM = ys.findIndex(v => v > 2), early = Lg.simulated_ps < Lg.asked_ps - 0.5;
+  const full = Lg.crossings.filter(c => iM < 0 || c.release_ps < xs[iM]).length;
+  $("long-note").textContent = iM < 0
+    ? "Over " + fx(Lg.simulated_ps, 0) + " ps at " + volt(Lg.voltage_V) + " V the C60 stayed within " + fx(Math.max(...ys), 1) + " Å of the axis: " + full + " crossings. One run."
+    : "This " + volt(Lg.voltage_V) + " V run, done by hand and asked for " + fx(Lg.asked_ps, 0) + " ps, " + (early ? "stopped at " : "ran to ") + fx(Lg.simulated_ps, 0) + " ps. After " + full
+      + " crossings the C60 has drifted off the axis (from about " + fx(xs[iD], 0) + " ps) and misses the tube mouth at about " + fx(xs[iM], 0)
+      + " ps; it then bounces off the rims, carrying up to " + fx(Math.max(...Lg.crossings.map(c => Math.abs(c.q_e))), 1)
+      + " e, and leaves sideways. One run: another seed could drift sooner, later or not at all.";
 })();
 
-/* ---------- tentatives du LLM ---------- */
+/* ---------- tentatives du LLM : un tableau par run, chaque ligne renvoie a son vol dans l'animation ---------- */
 (function () {
   const A = DATA.agent || [];
   if (!A.length) { $("agent-block").hidden = true; return; }
   const cls = (v, first) => first ? "v-cut" : v === "crossed_intact" ? "v-ok" : /destroyed|lost|refused/.test(v) ? "v-bad" : "v-cut";
-  $("agent-grid").innerHTML = A.map(r => "<div><h3>" + r.label + " · " + r.judge + '</h3><div class="tablewrap"><table class="rates"><tr><th>#</th><th>Voltage</th><th>Tubes</th><th>Length</th><th>Verdict of the code</th></tr>'
-    + r.flights.map((f, i) => "<tr><td>" + (i + 1) + '</td><td style="white-space: nowrap">' + fx(f.voltage_V, 2) + " V</td><td>" + (f.capped ? "capped" : "open") + ", " + (f.flexible ? "flexible" : "rigid")
-      + '</td><td style="white-space: nowrap">' + fx(f.ps, 0) + ' ps</td><td class="' + cls(f.verdict, /first/.test(r.judge)) + '">' + f.verdict.replace(/_/g, " ") + "</td></tr>").join("")
+  $("agent-grid").innerHTML = A.map(r => "<div><h3>" + r.label + " · " + r.judge + (r.finished ? "" : " · still running") + '</h3><div class="tablewrap"><table class="rates"><tr><th>#</th><th>Voltage</th><th>Tubes</th><th>Length</th><th>Verdict of the code</th><th></th></tr>'
+    + r.flights.map((f, i) => "<tr><td>" + (i + 1) + '</td><td style="white-space: nowrap">' + volt(f.voltage_V) + " V</td><td>" + (f.capped ? "capped" : "open") + ", " + (f.flexible ? "flexible" : "rigid")
+      + '</td><td style="white-space: nowrap">' + fx(f.ps, 0) + ' ps</td><td class="' + cls(f.verdict, /first/.test(r.judge)) + '">' + words(f.verdict) + "</td><td>"
+      + (STORY.indexOf(f.idx) >= 0 ? '<a href="#stage" data-step="' + STORY.indexOf(f.idx) + '">watch</a>' : "") + "</td></tr>").join("")
     + "</table></div></div>").join("");
+  $("agent-grid").addEventListener("click", e => { const a = e.target.closest("a[data-step]"); if (!a) return;
+    e.preventDefault(); load(Number(a.dataset.step), true); $("stage").scrollIntoView({ behavior: "smooth", block: "center" }); });
 })();
 
 /* ---------- transport ---------- */
-const playBtn = $("play"), scrub = $("scrub"), NF = T.frames;
-let cur = 0, playing = false, acc = 0, last = 0, draw3d = () => {};
-scrub.max = NF - 1;
 function seriesAt(t) { const xs = R.time_ps; let i = 0; while (i < xs.length - 1 && xs[i + 1] <= t) i++; return i; }
 function show(f) {
   cur = f; scrub.value = f;
   const t = T.frame_ps[f], i = seriesAt(t), l = R.link[i];
   $("r-q").textContent = sgn(R.q_ball_e[i], 2) + " e";
   $("r-time").textContent = "t = " + fx(t, 2) + " ps";
-  $("r-where").textContent = l === "-" ? "free flight, charge conserved" : "in contact with the " + (l === "L" ? "left" : "right") + " tube";
+  $("r-where").textContent = (f >= NF - 1 && VERDICT) ? "end of the flight: " + VERDICT
+    : (ENDED && f >= NF - 1) ? "end of the run: the C60 has left the shuttle"
+    : l === "-" ? "free flight, charge conserved" : "in contact with the " + (l === "L" ? "left" : "right") + " tube";
   $("r-frame").textContent = "frame " + (f + 1) + " / " + NF;
   for (const h of hairs) h(t);
   draw3d(f);
 }
-function setPlaying(on) { playing = on; playBtn.textContent = on ? "Pause" : "Play"; if (on) { last = performance.now(); requestAnimationFrame(tick); } }
-function tick(now) {
-  if (!playing) return;
-  acc += (now - last) / 1000 * Number($("speed").value); last = now;
-  if (acc >= 1) { const step = Math.floor(acc); acc -= step; show((cur + step) % NF); }
-  requestAnimationFrame(tick);
+function setPlaying(on) {
+  playing = on;
+  playBtn.textContent = on ? "Pause" : (cur >= NF - 1 && SI >= STORY.length - 1) ? "Replay from flight 1" : "Play";
+  if (on) { last = performance.now(); requestAnimationFrame(frame); }
 }
-playBtn.addEventListener("click", () => setPlaying(!playing));
-scrub.addEventListener("input", () => { setPlaying(false); show(Number(scrub.value)); });
+/* L'avance se calcule sur le temps ecoule, pas sur le nombre d'images dessinees. Elle est appelee par
+   requestAnimationFrame ET par une horloge : dans un panneau en arriere-plan, le navigateur cesse de dessiner,
+   et sans l'horloge l'histoire resterait figee sur le premier vol. */
+function advance() {
+  if (!playing) return;
+  const now = performance.now();
+  acc += Math.min(1.5, (now - last) / 1000) * Number($("speed").value); last = now;
+  if (acc < 1) return;
+  const step = Math.floor(acc); acc -= step;
+  if (cur + step >= NF - 1) {                      /* fin du vol : on laisse lire le verdict, puis on enchaine sur le vol suivant */
+    show(NF - 1); setPlaying(false);
+    if (SI < STORY.length - 1) nextTimer = setTimeout(() => load(SI + 1, true), 2200);
+    return;
+  }
+  show(cur + step);
+}
+function frame() { advance(); if (playing) requestAnimationFrame(frame); }
+setInterval(advance, 200);
+/* charge un vol de l'histoire, sans recharger la page */
+function load(si, autoplay, frame) {
+  clearTimeout(nextTimer); playing = false;
+  SI = Math.max(0, Math.min(STORY.length - 1, si));
+  FL = FLIGHTS[STORY[SI]]; R = FL.run; T = FL.traj; X = FL.crossings; NF = T.frames;
+  ENDED = R.simulated_ps < R.steps / 1000 - 0.5;   /* le script a arrete le vol avant la duree demandee */
+  VERDICT = FL.verdict ? words(FL.verdict) : null;
+  scrub.max = NF - 1; acc = 0;
+  side(); charts(); scene3d.load();
+  /* barre des vols : faits, en cours, a venir ; le dernier segment est le vol fait a la main */
+  $("steps").innerHTML = STORY.map((k, n) => '<span class="' + (n < SI ? "done" : n === SI ? "on" : "") + (k === 0 ? " hand" : "") + '" title="' + FLIGHTS[k].label.replace(/"/g, "") + '"></span>').join("");
+  show(Math.max(0, Math.min(NF - 1, frame || 0)));
+  setPlaying(!!autoplay);
+}
+playBtn.addEventListener("click", () => {
+  clearTimeout(nextTimer);
+  if (!playing && cur >= NF - 1) { load(SI < STORY.length - 1 ? SI + 1 : 0, true); return; }
+  setPlaying(!playing);
+});
+scrub.addEventListener("input", () => { clearTimeout(nextTimer); setPlaying(false); show(Number(scrub.value)); });
+$("restart").addEventListener("click", () => load(0, true));
 
 /* ---------- scene 3D ---------- */
-(function () {
+const scene3d = (function () {
   const stage = $("stage"), canvas = $("gl");
   let renderer;
   try { if (!window.THREE) throw 0; renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: CAP }); }
@@ -367,50 +445,27 @@ scrub.addEventListener("input", () => { setPlaying(false); show(Number(scrub.val
     canvas.hidden = true;
     stage.appendChild(Object.assign(document.createElement("div"), { className: "fallback",
       textContent: "The 3D view could not start in this browser (WebGL unavailable). The numbers and curves are unaffected." }));
-    return;
+    return { load() {} };
   }
   const dec = b64 => new Int16Array(Uint8Array.from(atob(b64), c => c.charCodeAt(0)).buffer);
-  const xyz = dec(T.xyz), qv = dec(T.q), N = T.atoms, NT = N - T.n_ball;
-  /* axe des tubes (z de LAMMPS) place a l'horizontale : (X, Y, Z) = (z, x, y) */
-  const at = (f, i) => { const o = (f * N + i) * 3; return [xyz[o + 2] / 100, xyz[o] / 100, xyz[o + 1] / 100]; };
-  const qAt = (f, i) => qv[f * N + i] / T.q_scale;
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
   const scene = new THREE.Scene(), cam = new THREE.PerspectiveCamera(28, 16 / 9, 1, 5000);
   cam.up.set(0, 0, 1);
   scene.add(new THREE.HemisphereLight(0xffffff, 0x556070, 0.95));
   const sun = new THREE.DirectionalLight(0xffffff, 0.6); sun.position.set(0.3, -0.7, 1); scene.add(sun);
-
-  /* liaisons de la premiere image, listees une fois ; une liaison etiree au-dela de 2 A n'est plus dessinee */
-  const P0 = []; for (let i = 0; i < N; i++) P0.push(at(0, i));
-  const order = P0.map((p, i) => i).sort((a, b) => P0[a][0] - P0[b][0]), bl = [];
-  for (let a = 0; a < N; a++) for (let b = a + 1; b < N; b++) {
-    const i = order[a], j = order[b], dx = P0[j][0] - P0[i][0]; if (dx > 1.8) break;
-    const dy = P0[i][1] - P0[j][1], dz = P0[i][2] - P0[j][2]; if (dx * dx + dy * dy + dz * dz < 3.24) bl.push(i, j); }
-  const NB = bl.length / 2;
-  const bonds = new THREE.InstancedMesh(new THREE.CylinderGeometry(1, 1, 1, 6, 1, true), new THREE.MeshLambertMaterial(), NB);
-  const atoms = new THREE.InstancedMesh(new THREE.SphereGeometry(0.46, 14, 10), new THREE.MeshLambertMaterial(), T.n_ball);
-  atoms.frustumCulled = bonds.frustumCulled = false;
-  scene.add(bonds, atoms);
-  /* bornes de la source de tension : ILLUSTRATION. Le calcul impose le potentiel sur chaque atome des tubes,
-     il ne contient ni electrode ni fil. Plaque + derriere la calotte gauche, plaque - derriere la droite. */
-  let xEnd = 0; for (let i = 0; i < N; i++) xEnd = Math.max(xEnd, Math.abs(P0[i][0]));
-  const xPlate = xEnd + 4, drop = -17;
-  const plateGeo = new THREE.BoxGeometry(3, 21, 21);
-  const plates = [-1, 1].map(s => { const m = new THREE.Mesh(plateGeo, new THREE.MeshLambertMaterial({ transparent: true, opacity: 0.88 }));
-    m.position.set(s * xPlate, 0, 0); scene.add(m); return m; });
-  const wire = new THREE.Line(new THREE.BufferGeometry().setFromPoints(
-    [[-xPlate, 0, -10.5], [-xPlate, 0, drop], [-7, 0, drop], [7, 0, drop], [xPlate, 0, drop], [xPlate, 0, -10.5]].map(p => new THREE.Vector3(...p))),
-    new THREE.LineBasicMaterial());
-  scene.add(wire);
-  /* pile au milieu du fil : grand trait cote +, petit trait cote - */
-  const cell = [[-1.2, 5.5], [1.2, 3]].map(([x, h]) => { const m = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.7, h), new THREE.MeshLambertMaterial());
-    m.position.set(x, 0, drop); scene.add(m); return m; });
-  const gapCover = new THREE.Mesh(new THREE.BoxGeometry(1.7, 0.5, 0.9), new THREE.MeshBasicMaterial()); gapCover.position.set(0, 0, drop); scene.add(gapCover);
-  function label(text, x, z, size) {
-    const sp = new THREE.Sprite(new THREE.SpriteMaterial({ depthTest: false, transparent: true }));
-    sp.position.set(x, 0, z); sp.scale.set(size * (text.length > 1 ? 2.6 : 1), size, 1); sp.userData.text = text; scene.add(sp); return sp;
+  const col = {}, tmp = new THREE.Color(), dummy = new THREE.Object3D(), up = new THREE.Vector3(0, 1, 0), dir = new THREE.Vector3();
+  const shade = t => { t = Math.max(-1, Math.min(1, t)); return tmp.copy(col.bond).lerp(t >= 0 ? col.pos : col.neg, Math.pow(Math.abs(t), 0.6)); };
+  let group = null, theme = () => {}, span = 100, az = Q.has("az") ? Number(Q.get("az")) : -0.22, pol = 1.2, dist = 130;
+  function render() {
+    cam.position.set(dist * Math.sin(pol) * Math.sin(az), -dist * Math.sin(pol) * Math.cos(az), dist * Math.cos(pol));
+    cam.lookAt(0, 0, 0); renderer.render(scene, cam);
   }
-  const labels = [label("+", -xPlate, 15.5, 8), label("−", xPlate, 15.5, 8), label(fx(R.voltage_V, 0) + " V", 0, drop - 6, 5.5)];
+  function resize() { const w = stage.clientWidth, h = stage.clientHeight; if (!w || !h) return; renderer.setSize(w, h, false); cam.aspect = w / h;
+    /* champ horizontal constant (48 degres) : la scene garde sa largeur quelle que soit la forme du cadre */
+    cam.fov = 2 * Math.atan(Math.tan(0.417) / cam.aspect) * 180 / Math.PI;
+    /* les courbes occupent le bas de la scene : on remonte la vue de la moitie de leur hauteur */
+    cam.setViewOffset(w, h, 0, Math.round($("live").offsetHeight * 0.5), w, h);
+    cam.updateProjectionMatrix(); render(); }
   function paintLabel(sp, color) {
     const c = document.createElement("canvas"), wide = sp.userData.text.length > 1; c.width = wide ? 333 : 128; c.height = 128;
     const g = c.getContext("2d"); g.fillStyle = color; g.textAlign = "center"; g.textBaseline = "middle";
@@ -418,48 +473,83 @@ scrub.addEventListener("input", () => { setPlaying(false); show(Number(scrub.val
     if (sp.material.map) sp.material.map.dispose();
     sp.material.map = new THREE.CanvasTexture(c); sp.material.needsUpdate = true;
   }
-  let qTube = 0; for (let k = 0; k < NF * N; k += 97) { const i = k % N; if (i < NT) qTube = Math.max(qTube, Math.abs(qv[k] / T.q_scale)); }
-  const qBall = Math.max(...R.q_ball_e.map(Math.abs)) || 1;
-  const col = {}, tmp = new THREE.Color(), dummy = new THREE.Object3D(), up = new THREE.Vector3(0, 1, 0), dir = new THREE.Vector3();
-  const shade = t => { t = Math.max(-1, Math.min(1, t)); return tmp.copy(col.bond).lerp(t >= 0 ? col.pos : col.neg, Math.pow(Math.abs(t), 0.6)); };
-  function theme() {
-    for (const k of ["stage", "pos", "neg", "bond"]) col[k] = new THREE.Color(css("--" + k));
-    renderer.setClearColor(col.stage, 1);
-    plates[0].material.color.copy(col.pos); plates[1].material.color.copy(col.neg);
-    cell[0].material.color.copy(col.pos); cell[1].material.color.copy(col.neg);
-    wire.material.color.set(css("--muted")); gapCover.material.color.copy(col.stage);
-    paintLabel(labels[0], css("--pos")); paintLabel(labels[1], css("--neg")); paintLabel(labels[2], css("--muted"));
-    /* les couleurs d'instance doivent exister AVANT le premier rendu, sinon le shader est compile sans elles */
-    for (let k = 0; k < NB; k++) bonds.setColorAt(k, col.bond);
-    for (let i = 0; i < T.n_ball; i++) atoms.setColorAt(i, col.bond);
-    bonds.instanceColor.needsUpdate = atoms.instanceColor.needsUpdate = true;
-  }
-  draw3d = function (f) {
-    const P = []; for (let i = 0; i < N; i++) P.push(at(f, i));
-    let qb = 0; for (let i = NT; i < N; i++) qb += qAt(f, i);
-    const cb = shade(qb / qBall).clone();
-    for (let i = NT; i < N; i++) { dummy.position.set(P[i][0], P[i][1], P[i][2]); dummy.quaternion.identity(); dummy.scale.set(1, 1, 1); dummy.updateMatrix();
-      atoms.setMatrixAt(i - NT, dummy.matrix); atoms.setColorAt(i - NT, cb); }
-    atoms.instanceMatrix.needsUpdate = true; atoms.instanceColor.needsUpdate = true;
-    let n = 0;
-    for (let k = 0; k < NB; k++) {
-      const i = bl[2 * k], j = bl[2 * k + 1], a = P[i], b = P[j], dx = b[0] - a[0], dy = b[1] - a[1], dz = b[2] - a[2], len = Math.sqrt(dx * dx + dy * dy + dz * dz);
-      if (len > 2.0) continue;
-      const ball = i >= NT, r = ball ? 0.2 : 0.15;
-      dir.set(dx, dy, dz).divideScalar(len); dummy.quaternion.setFromUnitVectors(up, dir);
-      dummy.position.set(a[0] + dx / 2, a[1] + dy / 2, a[2] + dz / 2); dummy.scale.set(r, len, r); dummy.updateMatrix();
-      bonds.setMatrixAt(n, dummy.matrix);
-      bonds.setColorAt(n, ball ? cb : shade((qAt(f, i) + qAt(f, j)) / 2 / qTube));
-      n++;
-    }
-    bonds.count = n; bonds.instanceMatrix.needsUpdate = true; bonds.instanceColor.needsUpdate = true;
-    render();
-  };
-  const span = 2 * (xPlate + 3);                                 /* bornes comprises */
-  let az = Q.has("az") ? Number(Q.get("az")) : -0.22, pol = 1.2, dist = span * 1.3;
-  function render() {
-    cam.position.set(dist * Math.sin(pol) * Math.sin(az), -dist * Math.sin(pol) * Math.cos(az), dist * Math.cos(pol));
-    cam.lookAt(0, 0, 0); renderer.render(scene, cam);
+  /* construit la scene du vol courant ; l'ancienne est retiree et liberee */
+  function load() {
+    if (group) { scene.remove(group); group.traverse(o => { if (o.geometry) o.geometry.dispose();
+      if (o.material) { if (o.material.map) o.material.map.dispose(); o.material.dispose(); } }); }
+    group = new THREE.Group(); scene.add(group);
+    const xyz = dec(T.xyz), qv = dec(T.q), N = T.atoms, NT = N - T.n_ball, tube0 = T.static ? dec(T.tube) : null, F = T.frames;
+    /* axe des tubes (z de LAMMPS) place a l'horizontale : (X, Y, Z) = (z, x, y).
+       tubes figes : leurs positions ne sont stockees qu'une fois, seul le C60 a une trajectoire */
+    const at = (f, i) => { if (tube0 && i < NT) return [tube0[3 * i + 2] / 100, tube0[3 * i] / 100, tube0[3 * i + 1] / 100];
+      const o = tube0 ? (f * T.n_ball + i - NT) * 3 : (f * N + i) * 3; return [xyz[o + 2] / 100, xyz[o] / 100, xyz[o + 1] / 100]; };
+    const qAt = (f, i) => qv[f * N + i] / T.q_scale;
+    /* liaisons de la premiere image, listees une fois ; une liaison etiree au-dela de 2 A n'est plus dessinee */
+    const P0 = []; for (let i = 0; i < N; i++) P0.push(at(0, i));
+    const order = P0.map((p, i) => i).sort((a, b) => P0[a][0] - P0[b][0]), bl = [];
+    for (let a = 0; a < N; a++) for (let b = a + 1; b < N; b++) {
+      const i = order[a], j = order[b], dx = P0[j][0] - P0[i][0]; if (dx > 1.8) break;
+      const dy = P0[i][1] - P0[j][1], dz = P0[i][2] - P0[j][2]; if (dx * dx + dy * dy + dz * dz < 3.24) bl.push(i, j); }
+    const NB = bl.length / 2;
+    const bonds = new THREE.InstancedMesh(new THREE.CylinderGeometry(1, 1, 1, 6, 1, true), new THREE.MeshLambertMaterial(), NB);
+    const atoms = new THREE.InstancedMesh(new THREE.SphereGeometry(0.46, 14, 10), new THREE.MeshLambertMaterial(), T.n_ball);
+    atoms.frustumCulled = bonds.frustumCulled = false;
+    group.add(bonds, atoms);
+    /* bornes de la source de tension : ILLUSTRATION. Le calcul impose le potentiel sur chaque atome des tubes,
+       il ne contient ni electrode ni fil. Plaque + derriere le tube de gauche, plaque - derriere celui de droite. */
+    let xEnd = 0; for (let i = 0; i < NT; i++) xEnd = Math.max(xEnd, Math.abs(P0[i][0]));
+    const xPlate = xEnd + 4, drop = -17;
+    const plates = [-1, 1].map(s => { const m = new THREE.Mesh(new THREE.BoxGeometry(3, 21, 21), new THREE.MeshLambertMaterial({ transparent: true, opacity: 0.88 }));
+      m.position.set(s * xPlate, 0, 0); group.add(m); return m; });
+    const wire = new THREE.Line(new THREE.BufferGeometry().setFromPoints(
+      [[-xPlate, 0, -10.5], [-xPlate, 0, drop], [-7, 0, drop], [7, 0, drop], [xPlate, 0, drop], [xPlate, 0, -10.5]].map(p => new THREE.Vector3(...p))),
+      new THREE.LineBasicMaterial());
+    group.add(wire);
+    /* pile au milieu du fil : grand trait cote +, petit trait cote - */
+    const cell = [[-1.2, 5.5], [1.2, 3]].map(([x, h]) => { const m = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.7, h), new THREE.MeshLambertMaterial());
+      m.position.set(x, 0, drop); group.add(m); return m; });
+    const gapCover = new THREE.Mesh(new THREE.BoxGeometry(1.7, 0.5, 0.9), new THREE.MeshBasicMaterial()); gapCover.position.set(0, 0, drop); group.add(gapCover);
+    const label = (text, x, z, size) => { const sp = new THREE.Sprite(new THREE.SpriteMaterial({ depthTest: false, transparent: true }));
+      sp.position.set(x, 0, z); sp.scale.set(size * (text.length > 1 ? 2.6 : 1), size, 1); sp.userData.text = text; group.add(sp); return sp; };
+    const labels = [label("+", -xPlate, 15.5, 8), label("−", xPlate, 15.5, 8), label(volt(R.voltage_V) + " V", 0, drop - 6, 5.5)];
+    let qTube = 1e-9; for (let k = 0; k < F * N; k += 97) { if (k % N < NT) qTube = Math.max(qTube, Math.abs(qv[k] / T.q_scale)); }
+    const qBall = Math.max(...R.q_ball_e.map(Math.abs)) || 1;
+    theme = function () {
+      for (const k of ["stage", "pos", "neg", "bond"]) col[k] = new THREE.Color(css("--" + k));
+      renderer.setClearColor(col.stage, 1);
+      plates[0].material.color.copy(col.pos); plates[1].material.color.copy(col.neg);
+      cell[0].material.color.copy(col.pos); cell[1].material.color.copy(col.neg);
+      wire.material.color.set(css("--muted")); gapCover.material.color.copy(col.stage);
+      paintLabel(labels[0], css("--pos")); paintLabel(labels[1], css("--neg")); paintLabel(labels[2], css("--muted"));
+      /* les couleurs d'instance doivent exister AVANT le premier rendu, sinon le shader est compile sans elles */
+      for (let k = 0; k < NB; k++) bonds.setColorAt(k, col.bond);
+      for (let i = 0; i < T.n_ball; i++) atoms.setColorAt(i, col.bond);
+      bonds.instanceColor.needsUpdate = atoms.instanceColor.needsUpdate = true;
+    };
+    draw3d = function (f) {
+      const P = []; for (let i = 0; i < N; i++) P.push(at(f, i));
+      let qb = 0; for (let i = NT; i < N; i++) qb += qAt(f, i);
+      const cb = shade(qb / qBall).clone();
+      for (let i = NT; i < N; i++) { dummy.position.set(P[i][0], P[i][1], P[i][2]); dummy.quaternion.identity(); dummy.scale.set(1, 1, 1); dummy.updateMatrix();
+        atoms.setMatrixAt(i - NT, dummy.matrix); atoms.setColorAt(i - NT, cb); }
+      atoms.instanceMatrix.needsUpdate = true; atoms.instanceColor.needsUpdate = true;
+      let n = 0;
+      for (let k = 0; k < NB; k++) {
+        const i = bl[2 * k], j = bl[2 * k + 1], a = P[i], b = P[j], dx = b[0] - a[0], dy = b[1] - a[1], dz = b[2] - a[2], len = Math.sqrt(dx * dx + dy * dy + dz * dz);
+        if (len > 2.0) continue;
+        const ball = i >= NT, r = ball ? 0.2 : 0.15;
+        dir.set(dx, dy, dz).divideScalar(len); dummy.quaternion.setFromUnitVectors(up, dir);
+        dummy.position.set(a[0] + dx / 2, a[1] + dy / 2, a[2] + dz / 2); dummy.scale.set(r, len, r); dummy.updateMatrix();
+        bonds.setMatrixAt(n, dummy.matrix);
+        bonds.setColorAt(n, ball ? cb : shade((qAt(f, i) + qAt(f, j)) / 2 / qTube));
+        n++;
+      }
+      bonds.count = n; bonds.instanceMatrix.needsUpdate = true; bonds.instanceColor.needsUpdate = true;
+      render();
+    };
+    const newSpan = 2 * (xPlate + 3);                              /* bornes comprises */
+    if (Math.abs(newSpan - span) > 0.5) { span = newSpan; dist = span * 1.3; }
+    theme(); resize();
   }
   let drag = null;
   canvas.addEventListener("pointerdown", e => { drag = [e.clientX, e.clientY]; canvas.setPointerCapture(e.pointerId); });
@@ -470,19 +560,13 @@ scrub.addEventListener("input", () => { setPlaying(false); show(Number(scrub.val
   canvas.addEventListener("wheel", e => { e.preventDefault(); dist = Math.max(span * 0.15, Math.min(span * 4, dist * Math.exp(e.deltaY * 0.001))); render(); }, { passive: false });
   $("view-side").addEventListener("click", () => { az = -0.22; pol = 1.2; dist = span * 1.3; render(); });
   $("view-axis").addEventListener("click", () => { az = -1.25; pol = 1.35; dist = span * 0.8; render(); });
-  function resize() { const w = stage.clientWidth, h = stage.clientHeight; if (!w || !h) return; renderer.setSize(w, h, false); cam.aspect = w / h;
-    /* champ horizontal constant (48 degres) : la scene garde sa largeur quelle que soit la forme du cadre */
-    cam.fov = 2 * Math.atan(Math.tan(0.417) / cam.aspect) * 180 / Math.PI;
-    /* les courbes occupent le bas de la scene : on remonte la vue de la moitie de leur hauteur */
-    cam.setViewOffset(w, h, 0, Math.round($("live").offsetHeight * 0.5), w, h);
-    cam.updateProjectionMatrix(); render(); }
   new ResizeObserver(resize).observe(stage);
   const retheme = () => { theme(); draw3d(cur); };
   matchMedia("(prefers-color-scheme: dark)").addEventListener("change", retheme);
   new MutationObserver(retheme).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
-  theme(); resize();
+  return { load };
 })();
 
-show(CAP ? Math.max(0, Math.min(NF - 1, Number(Q.get("f")) || 0)) : 0);
-if (!CAP && !matchMedia("(prefers-reduced-motion: reduce)").matches) setPlaying(true);
+/* depart : toujours le premier vol de l'histoire (pour une capture : ?capture&step=K&f=N) */
+load(CAP ? Number(Q.get("step")) || 0 : 0, !CAP && !matchMedia("(prefers-reduced-motion: reduce)").matches, CAP ? Number(Q.get("f")) || 0 : 0);
 </script>

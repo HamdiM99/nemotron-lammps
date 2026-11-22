@@ -70,7 +70,8 @@ def verdict(run: dict, capped: bool, length: float) -> tuple:
 class ShuttleBench:
     """Etat d'une session : puits mesure, seuils calcules, vols effectues. Chaque outil renvoie un dict."""
 
-    def __init__(self, workdir: str = "runs_fs_agent"):
+    def __init__(self, workdir: str = "runs_fs_agent", max_flights: int = MAX_FLIGHTS):
+        self.max_flights = max_flights
         self.dir = Path(workdir)
         self.dir.mkdir(parents=True, exist_ok=True)
         self.well = None
@@ -125,8 +126,8 @@ class ShuttleBench:
                 errors.append(f"{name} doit etre true ou false")
         if not errors and (float(depth_A), capped) not in self.thresholds:
             errors.append(f"vol refuse : calcule d'abord ejection_threshold(depth_A={depth_A}, capped={str(capped).lower()})")
-        if len(self.flights) >= MAX_FLIGHTS:
-            errors.append(f"budget epuise : {MAX_FLIGHTS} vols par session")
+        if len(self.flights) >= self.max_flights:
+            errors.append(f"budget epuise : {self.max_flights} vols par session")
         if errors:
             return {"ok": False, "errors": errors}
         name = f"fly{len(self.flights) + 1}"
@@ -179,7 +180,9 @@ def _num(bound: str, desc: str, kind: str = "number") -> dict:
 
 _DEPTH = "enfoncement initial du centre du C60 derriere la bouche du tube de depart, en A (0 = a la bouche)"
 _CAPPED = {"type": "boolean", "description": "true : chaque tube est ferme au bout arriere par une calotte ; false : bout arriere ouvert"}
-TOOLS = [
+def make_tools(max_flights: int = MAX_FLIGHTS) -> list:
+    """Schema des outils ; le budget de vols annonce au modele est celui que le code applique."""
+    return [
     ga._fn("measure_well", "Mesure le puits de van der Waals du C60 dans un tube : energie d'encapsulation (eV) et force "
            "de retenue maximale a la bouche (nN). A appeler en premier.", {}),
     ga._fn("ejection_threshold", "Calcul statique, rapide : tension (V) a partir de laquelle la traction electrostatique "
@@ -187,7 +190,7 @@ TOOLS = [
            "Obligatoire avant tout vol avec les memes depth_A et capped.",
            {"depth_A": _num("depth_A", _DEPTH), "capped": _CAPPED}),
     ga._fn("fly", "Dynamique moleculaire : le C60 part au repos du tube de droite, tubes a +V/2 et -V/2. "
-           f"Renvoie un verdict. Couteux : {MAX_FLIGHTS} vols au plus par session.",
+           f"Renvoie un verdict. Couteux : {max_flights} vols au plus par session.",
            {"voltage_V": _num("voltage_V", "tension entre les deux tubes, en V"),
             "depth_A": _num("depth_A", _DEPTH), "capped": _CAPPED,
             "flexible": {"type": "boolean", "description": "false : tubes parfaitement rigides ; true : tubes libres de "
@@ -195,7 +198,10 @@ TOOLS = [
             "steps": _num("steps", "nombre de pas de 1 fs (1000 pas = 1 ps)", "integer")}, ["voltage_V"]),
     ga._fn("report", "Tableau des vols de la session, plus basse tension ayant donne une traversee sans casse, "
            "hypotheses et avertissements. A appeler avant de repondre.", {}),
-]
+    ]
+
+
+TOOLS = make_tools()
 
 SYSTEM = """Tu pilotes une navette a fullerene avec quatre outils : un C60 doit passer d'un nanotube a l'autre sous tension.
 Ordre : measure_well, ejection_threshold, fly, report.
@@ -219,13 +225,15 @@ def dispatch(bench: ShuttleBench, name: str, raw_args: str) -> dict:
         return {"ok": False, "errors": [f"echec du calcul : {str(e)[:300]}"]}
 
 
-def run_agent(prompt: str, workdir: str, max_turns: int = 16, client=None, model: str | None = None) -> str:
+def run_agent(prompt: str, workdir: str, max_turns: int = 16, client=None, model: str | None = None,
+              max_flights: int = MAX_FLIGHTS) -> str:
     if client is None:
         from openai import OpenAI
         client = OpenAI(base_url=os.environ.get("LLM_BASE_URL", "https://integrate.api.nvidia.com/v1"),
                         api_key=os.environ["NVIDIA_API_KEY"])
     model = model or os.environ.get("NEMOTRON_MODEL", "nvidia/nemotron-3.5-super-vl-120b-a12b")
-    bench = ShuttleBench(workdir)
+    bench = ShuttleBench(workdir, max_flights)
+    tools = make_tools(max_flights)
     trace = bench.dir / "trace.jsonl"
     trace.write_text("")
 
@@ -233,10 +241,10 @@ def run_agent(prompt: str, workdir: str, max_turns: int = 16, client=None, model
         with trace.open("a", encoding="utf-8") as f:
             f.write(json.dumps(rec, ensure_ascii=False) + "\n")
 
-    log(type="start", prompt=prompt, model=model)
+    log(type="start", prompt=prompt, model=model, max_flights=max_flights)
     messages = [{"role": "system", "content": SYSTEM}, {"role": "user", "content": prompt}]
     for _ in range(max_turns):
-        msg = client.chat.completions.create(model=model, messages=messages, tools=TOOLS).choices[0].message
+        msg = client.chat.completions.create(model=model, messages=messages, tools=tools).choices[0].message
         if not msg.tool_calls:
             log(type="final", content=msg.content)
             return msg.content
@@ -258,7 +266,15 @@ if __name__ == "__main__":
     ap.add_argument("prompt")
     ap.add_argument("--workdir", default="runs_fs_agent")
     ap.add_argument("--max-turns", type=int, default=16)
+    ap.add_argument("--max-steps", type=int, default=BOUNDS["steps"][1],
+                    help="duree maximale d'un vol, en pas de 1 fs (defaut 12000 ; plus long = voir plusieurs traversees)")
+    ap.add_argument("--max-flights", type=int, default=MAX_FLIGHTS, help=f"budget de vols de la session (defaut {MAX_FLIGHTS})")
     a = ap.parse_args()
     if not os.environ.get("NVIDIA_API_KEY"):
         sys.exit("NVIDIA_API_KEY absente de l'environnement : arret.")
-    print(run_agent(a.prompt, a.workdir, a.max_turns))
+    if not 1 <= a.max_flights <= 12:
+        sys.exit("--max-flights doit etre entre 1 et 12")
+    if not BOUNDS["steps"][0] < a.max_steps <= 40_000:
+        sys.exit("--max-steps doit etre entre 2001 et 40000")
+    BOUNDS["steps"] = (BOUNDS["steps"][0], a.max_steps)          # borne annoncee au modele ET verifiee par le code
+    print(run_agent(a.prompt, a.workdir, a.max_turns, max_flights=a.max_flights))

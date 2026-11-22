@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Construit la page de la navette a fullerene a partir d'un dossier de fullerene_shuttle.
 
-  python viewer/build_fullerene.py runs_fs [--run fly_capped_flex_16V]
+  python viewer/build_fullerene.py runs_fs --run fly_capped_flex_16V_45ps
 
-Lit results.json et <run>.lammpstrj (positions et charges par image), et ecrit :
+Lit results.json et <run>.lammpstrj (positions et charges par image), plus les traces et trajectoires des
+sessions de l'agent (runs_fs_agent*/), et ecrit :
   docs/fullerene.html               page autonome, publiee avec le depot
   viewer/fullerene_artifact.html    meme contenu sans l'enveloppe html/head/body
 """
@@ -21,18 +22,27 @@ import fullerene_shuttle as fs  # noqa: E402
 import nanotube_lab as nt  # noqa: E402
 
 Q_SCALE = 20000          # charges stockees en entiers 16 bits : 1 unite = 5e-5 e
+AGENT_FRAMES = 70        # images gardees par vol de l'agent, tubes figes (seul le C60 est stocke image par image)
+AGENT_FRAMES_FLEX = 36   # tubes flexibles : tous les atomes sont stockes a chaque image, on en garde moins
+AGENT_DIRS = [("Run 1", "first judge", "runs_fs_agent"), ("Run 2", "hardened judge", "runs_fs_agent_v2"),
+              ("Run 3", "hardened judge, 10 flights, asked to make it oscillate", "runs_fs_agent_v3")]
+
+
+def pack(arr: np.ndarray, scale: float) -> str:
+    return base64.b64encode(np.round(arr * scale).astype("<i2").tobytes()).decode()
 
 
 def read_dump(path: Path) -> tuple:
     """(pas, positions[image][atome][xyz], charges[image][atome], types) ; atomes tries par id."""
     steps, xyz, q, types = [], [], [], None
     lines = path.read_text().splitlines()
-    i = 0
+    i, n0 = 0, None
     while i < len(lines):
         if lines[i].startswith("ITEM: TIMESTEP"):
             n = int(lines[i + 3])
-            if i + 9 + n > len(lines):
-                break                                            # derniere image incomplete
+            n0 = n0 or n
+            if i + 9 + n > len(lines) or n != n0:
+                break                                            # image incomplete, ou atomes perdus
             cols = lines[i + 8].split()[2:]
             arr = np.array([l.split() for l in lines[i + 9:i + 9 + n]], dtype=float)
             arr = arr[np.argsort(arr[:, cols.index("id")])]
@@ -64,28 +74,60 @@ def crossings(run: dict) -> list:
     return out
 
 
-def long_run(workdir: Path, res: dict, key: str) -> dict | None:
-    """Suite du meme vol : traversees et ecart du C60 a l'axe, image par image."""
-    run = res.get(key)
-    if not run or not (workdir / f"{key}.lammpstrj").exists():
-        return None
-    steps, xyz, _, types = read_dump(workdir / f"{key}.lammpstrj")
-    ball = xyz[:, types == 3, :].mean(axis=1)
-    return {"simulated_ps": run["simulated_ps"], "voltage_V": run["voltage_V"], "crossings": crossings(run),
-            "t_ps": [round(s * nt.DT_PS, 2) for s in steps],
-            "off_axis_A": np.hypot(ball[:, 0], ball[:, 1]).round(2).tolist()}
+def period(cross: list) -> float | None:
+    same = [c["release_ps"] for c in cross if c["to"] == "left" and c.get("on_axis", True)]
+    return (same[-1] - same[0]) / (len(same) - 1) if len(same) >= 2 else None
 
 
-def agent_runs(dirs: list) -> list:
-    """Vols demandes par le LLM, lus dans trace.jsonl : parametres choisis et verdict ecrit par le code."""
+def traj(steps: list, xyz: np.ndarray, q: np.ndarray, types: np.ndarray, static: bool, max_frames: int | None) -> dict:
+    """Trajectoire embarquee. static : tubes figes, on ne stocke leurs positions qu'une fois."""
+    idx = np.arange(len(steps)) if not max_frames or len(steps) <= max_frames else \
+        np.unique(np.linspace(0, len(steps) - 1, max_frames).round().astype(int))
+    ball = types == 3
+    out = {"frames": len(idx), "atoms": int(xyz.shape[1]), "n_ball": int(ball.sum()), "static": static,
+           "frame_ps": [round(steps[k] * nt.DT_PS, 3) for k in idx], "q": pack(q[idx], Q_SCALE), "q_scale": Q_SCALE}
+    if static:
+        out["xyz"], out["tube"] = pack(xyz[idx][:, ball, :], 100), pack(xyz[0][~ball], 100)
+    else:
+        out["xyz"] = pack(xyz[idx], 100)
+    return out
+
+
+def run_from_dump(steps: list, xyz: np.ndarray, q: np.ndarray, types: np.ndarray, args: dict) -> dict:
+    """Series temporelles d'un vol de l'agent, recalculees a partir de sa trajectoire (la trace n'en garde qu'un resume)."""
+    ball, left, right = types == 3, types == 1, types == 2
+    t = np.array(steps) * nt.DT_PS
+    z = xyz[:, ball, 2].mean(axis=1)
+    qb = q[:, ball].sum(axis=1)
+    link = [fs.link_of(xyz[k][ball], xyz[k][left], xyz[k][right]) or "-" for k in range(len(steps))]
+    speed = np.abs(np.gradient(z, t)) * 100.0 if len(t) > 2 else np.zeros(len(t))
+    free = [k for k, l in enumerate(link) if l == "-"]
+    run = {"time_ps": t.round(3).tolist(), "z_A": z.round(3).tolist(), "q_ball_e": qb.round(5).tolist(), "link": link,
+           "simulated_ps": round(float(t[-1]), 3), "steps": int(args.get("steps", 8000)), "voltage_V": args["voltage_V"],
+           "gap_A": 20.0, "capped": args.get("capped", True), "flexible": args.get("flexible", False), "update": 25,
+           "max_speed_m_s": round(float(speed.max()), 1),
+           "max_kinetic_eV": round(0.5 * fs.MASS_C60_KG * float(speed.max()) ** 2 / 1.602177e-19, 2),
+           "flight_ps": None, "charge_drift_e": None}
+    if free:
+        end = next((k for k in range(free[0], len(link)) if link[k] != "-"), len(link))
+        run["flight_ps"] = round(float(t[end - 1] - t[free[0]]), 3)
+        run["charge_drift_e"] = float(np.abs(qb[free[0]:end] - qb[free[0]]).max())
+    return run
+
+
+def agent_runs(dirs: list, flights: list) -> list:
+    """Vols demandes par le LLM, lus dans trace.jsonl : parametres choisis et verdict ecrit par le code.
+
+    Chaque vol qui a tourne est aussi ajoute a `flights`, avec sa trajectoire, pour etre rejoue dans la scene 3D."""
     out = []
     for label, judge, d in dirs:
         trace = Path(d) / "trace.jsonl"
         if not trace.exists():
             continue
-        flights, lowest = [], None
+        rows, lowest, done = [], None, False
         for line in trace.read_text(encoding="utf-8").splitlines():
             rec = json.loads(line)
+            done = done or rec["type"] in ("final", "stop")
             if rec["type"] != "tool":
                 continue
             if rec["name"] == "report":
@@ -93,42 +135,69 @@ def agent_runs(dirs: list) -> list:
             if rec["name"] != "fly":
                 continue
             a, r = json.loads(rec["args"]), rec["result"]
-            flights.append({"voltage_V": a.get("voltage_V"), "capped": a.get("capped", True), "flexible": a.get("flexible", False),
-                            "ps": round(a.get("steps", 8000) / 1000, 1),
-                            "verdict": r.get("verdict") if r.get("ok") else "refused by the code: threshold not computed"})
-        out.append({"label": label, "judge": judge, "flights": flights, "lowest_V": lowest})
+            row = {"voltage_V": a.get("voltage_V"), "capped": a.get("capped", True), "flexible": a.get("flexible", False),
+                   "ps": round(a.get("steps", 8000) / 1000, 1), "crossings": r.get("crossings"), "idx": None,
+                   "verdict": r.get("verdict") if r.get("ok") else "refused by the code: threshold not computed"}
+            dump = Path(d) / f"{r.get('flight')}.lammpstrj"
+            if r.get("ok") and dump.exists():
+                steps, xyz, q, types = read_dump(dump)
+                run = run_from_dump(steps, xyz, q, types, a)
+                tubes = ("capped" if row["capped"] else "open") + ", " + ("flexible" if row["flexible"] else "rigid")
+                row["idx"] = len(flights)
+                n = len([x for x in rows if x["idx"] is not None]) + 1
+                flights.append({"label": f"LLM {label.lower()}, flight {n}: {row['voltage_V']:g} V, {tubes}",
+                                "verdict": row["verdict"], "run": run,
+                                "traj": traj(steps, xyz, q, types, not row["flexible"],
+                                             AGENT_FRAMES_FLEX if row["flexible"] else AGENT_FRAMES),
+                                "crossings": crossings(run), "period_ps": None})
+            rows.append(row)
+        out.append({"label": label, "judge": judge, "flights": rows, "lowest_V": lowest, "finished": done})
     return out
 
 
-def build(workdir: Path, key: str | None) -> dict:
+def build(workdir: Path, key: str | None, long_key: str | None = None) -> dict:
     res = json.loads((workdir / "results.json").read_text())
     # par defaut : le plus long des vols flexibles a calottes
     key = key or max((k for k in res if k.startswith("fly_capped_flex")), key=lambda k: res[k].get("simulated_ps", 0))
     run = res[key]
     steps, xyz, q, types = read_dump(workdir / f"{key}.lammpstrj")
-    pack = lambda arr, s: base64.b64encode(np.round(arr * s).astype("<i2").tobytes()).decode()  # noqa: E731
     cross = crossings(run)
     thr = res.get("threshold_capped" if run.get("capped") else "threshold", {})
-    period = None
-    same = [c["release_ps"] for c in cross if c["to"] == "left"]
-    if len(same) >= 2:
-        period = (same[-1] - same[0]) / (len(same) - 1)
-    return {"key": key, "run": run, "well": res.get("well", {}), "threshold": {k: v for k, v in thr.items() if k != "scan"},
-            "crossings": cross, "period_ps": period, "warnings": res.get("warnings", []),
-            "bounds": fs.BOUNDS, "contact_A": fs.CONTACT_A,
-            "long": long_run(workdir, res, key + "_200ps"),
-            "agent": agent_runs([("Run 1", "first judge", "runs_fs_agent"), ("Run 2", "hardened judge", "runs_fs_agent_v2")]),
-            "traj": {"frames": len(xyz), "atoms": int(xyz.shape[1]), "n_ball": int((types == 3).sum()),
-                     "n_left": int((types == 1).sum()), "frame_ps": [round(s * nt.DT_PS, 3) for s in steps],
-                     "xyz": pack(xyz, 100), "q": pack(q, Q_SCALE), "q_scale": Q_SCALE}}
+    # traversees "dans l'axe" : celles qui partent avant que le C60 s'ecarte de plus de 2 A de l'axe ; ensuite il
+    # rebondit sur les bords des bouches
+    t_frames = np.array(steps) * nt.DT_PS
+    off = np.hypot(*xyz[:, types == 3, :].mean(axis=1)[:, :2].T)
+    t_miss = float(t_frames[np.argmax(off > 2.0)]) if (off > 2.0).any() else float("inf")
+    for c in cross:                                              # tout ce qui part apres la premiere sortie d'axe est un rebond
+        c["on_axis"] = bool(c["release_ps"] < t_miss)
+    flights = [{"label": f"Run by hand, not by the LLM: {run['voltage_V']:g} V, capped, flexible", "verdict": None, "run": run,
+                "traj": traj(steps, xyz, q, types, False, None), "crossings": cross, "period_ps": period(cross)}]
+    agent = agent_runs(AGENT_DIRS, flights)
+    lk = long_key or key
+    steps_l, ball = steps, xyz[:, types == 3, :].mean(axis=1)
+    if lk != key:
+        steps_l, lx, _, lt = read_dump(workdir / f"{lk}.lammpstrj")
+        ball = lx[:, lt == 3, :].mean(axis=1)
+    lrun = res[lk]
+    long = {"simulated_ps": lrun["simulated_ps"], "asked_ps": round(lrun["steps"] * nt.DT_PS, 1), "voltage_V": lrun["voltage_V"],
+            "crossings": crossings(lrun), "t_ps": [round(s * nt.DT_PS, 2) for s in steps_l],
+            "off_axis_A": np.hypot(ball[:, 0], ball[:, 1]).round(2).tolist()}
+    # histoire jouee par l'animation : TOUS les vols de l'agent, run apres run, dans l'ordre ou il les a demandes ;
+    # le vol fait a la main (indice 0) ne vient qu'en tout dernier
+    story = [f["idx"] for r in agent for f in r["flights"] if f["idx"] is not None] + [0]
+    story_run = None
+    return {"key": key, "story": story, "story_run": story_run, "well": res.get("well", {}), "threshold": {k: v for k, v in thr.items() if k != "scan"},
+            "warnings": res.get("warnings", []), "bounds": fs.BOUNDS, "contact_A": fs.CONTACT_A,
+            "flights": flights, "long": long, "agent": agent}
 
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("workdir")
-    ap.add_argument("--run", default=None, help="cle du vol dans results.json (defaut : premier vol flexible a calottes)")
+    ap.add_argument("--run", default=None, help="cle du vol de reference dans results.json (defaut : le plus long vol flexible a calottes)")
+    ap.add_argument("--long", default=None, help="cle d'un autre vol pour le bloc 'It does not last' (defaut : le vol de reference)")
     a = ap.parse_args()
-    data = build(Path(a.workdir), a.run)
+    data = build(Path(a.workdir), a.run, a.long)
     page = (HERE / "fullerene_template.html").read_text(encoding="utf-8").replace(
         "/*__DATA__*/null", json.dumps(data, ensure_ascii=False, separators=(",", ":")).replace("</", "<\\/"))
     (HERE / "fullerene_artifact.html").write_text(page, encoding="utf-8")
@@ -143,5 +212,5 @@ if __name__ == "__main__":
         '<meta property="og:title" content="Fullerene Charge Shuttle">\n'
         f'<meta property="og:description" content="{desc}">\n</head><body>\n' + page + "\n</body></html>\n",
         encoding="utf-8")
-    print(f"{docs / 'fullerene.html'} ({len(page) // 1024} ko), {data['traj']['frames']} images, "
-          f"{len(data['crossings'])} traversees")
+    print(f"{docs / 'fullerene.html'} ({len(page) // 1024} ko), {len(data['flights'])} vols dont "
+          f"{len(data['flights']) - 1} de l'agent, vol de reference : {data['flights'][0]['traj']['frames']} images")
