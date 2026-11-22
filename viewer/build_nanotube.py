@@ -3,47 +3,42 @@
 
   python viewer/build_nanotube.py runs_nt
 
-Lit results.json, close.data (charges) et close.lammpstrj (trajectoire), et ecrit :
+Lit results.json (proprietes statiques) et ecrit :
   docs/nanotube.html                page autonome, publiee avec le depot
   viewer/nanotube_artifact.html     meme contenu sans l'enveloppe html/head/body
 """
 import argparse
 import base64
 import json
-import struct
 import sys
 from pathlib import Path
+
+import numpy as np
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent))
 import nanotube_lab as nt  # noqa: E402
 
 
-def read_charges(path: Path) -> list:
-    """Charges par atome, dans l'ordre des identifiants, lues dans la section Atoms # charge."""
-    lines = path.read_text().splitlines()
-    start = next(i for i, l in enumerate(lines) if l.startswith("Atoms"))
-    rows = [l.split() for l in lines[start + 2:] if l.strip()]
-    rows.sort(key=lambda t: int(t[0]))
-    return [float(t[2]) for t in rows]
-
-
 def build(workdir: Path) -> dict:
     res = json.loads((workdir / "results.json").read_text())
-    data = {"results": res, "bounds": nt.BOUNDS}
-    if (workdir / "close.lammpstrj").exists() and res.get("close", {}).get("ok"):
-        steps, frames, types = nt.read_dump(workdir / "close.lammpstrj")
-        q = read_charges(workdir / "close.data")
-        inner = [i for i, t in enumerate(types) if t in (1, 3)]
-        outer = [i for i, t in enumerate(types) if t in (2, 4)]
-        pack = lambda arr: base64.b64encode(struct.pack(f"<{arr.size}h", *(round(v * 100) for v in arr.ravel()))).decode()  # noqa: E731
-        data["traj"] = {
-            "n_inner": len(inner), "n_outer": len(outer), "frames": len(frames),
-            "inner": pack(frames[:, inner, :]),               # coeurs : toutes les images, 0,01 A
-            "outer": pack(frames[0][outer, :]),               # parois figees : une seule image
-            "q_inner": [round(q[i], 5) for i in inner],
-            "side_inner": [0 if types[i] == 1 else 1 for i in inner],
-        }
+    # la page ne publie que les proprietes statiques : les essais de fermeture et de rotation n'y figurent pas
+    keep = {k: v for k, v in res.items() if k in ("static", "charges", "force", "oscillator")}
+    keep["warnings"] = nt.plausibility(keep)
+    data = {"results": keep, "bounds": nt.BOUNDS}
+    st, gaps = keep.get("static", {}), keep.get("force", {}).get("gaps", [])
+    if st and gaps:
+        # geometrie de depart des deux navettes, charges calculees a la tension de seuil du plus petit ecart
+        n, cells, gap, volt = st["n_inner"], st["cells"], gaps[0]["gap_A"], gaps[0].get("threshold_V") or 10.0
+        groups = nt.head_to_head(n, cells, gap)
+        pos = np.vstack(groups)
+        sizes = np.cumsum([0] + [len(g) for g in groups])
+        q = nt.solve_charges(pos, np.where(np.arange(len(pos)) < sizes[2], volt / 2, -volt / 2))
+        inner, outer = np.vstack([groups[0], groups[2]]), np.vstack([groups[1], groups[3]])
+        pack = lambda arr: base64.b64encode(np.round(arr * 100).astype("<i2").tobytes()).decode()  # noqa: E731
+        data["geom"] = {"gap_A": gap, "voltage_V": volt, "n_inner": len(inner), "n_outer": len(outer),
+                        "inner": pack(inner), "outer": pack(outer),
+                        "q_inner": [round(float(v), 5) for v in np.r_[q[sizes[0]:sizes[1]], q[sizes[2]:sizes[3]]]]}
     return data
 
 
@@ -66,4 +61,4 @@ if __name__ == "__main__":
         '<meta property="og:title" content="Nanotube Shuttle Lab">\n'
         f'<meta property="og:description" content="{desc}">\n</head><body>\n' + page + "\n</body></html>\n",
         encoding="utf-8")
-    print(f"{docs / 'nanotube.html'} ({len(page) // 1024} ko), trajectoire : {'oui' if 'traj' in data else 'non'}")
+    print(f"{docs / 'nanotube.html'} ({len(page) // 1024} ko), vue 3D : {'oui' if 'geom' in data else 'non'}")

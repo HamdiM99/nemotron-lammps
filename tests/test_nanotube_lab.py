@@ -101,13 +101,6 @@ def test_le_seuil_augmente_avec_l_ecart():
 # --------------------------------------------------------------------------- #
 # Bornes et plausibilite
 # --------------------------------------------------------------------------- #
-@pytest.mark.parametrize("kwargs", [{"gap": 500.0}, {"volt": 100.0}, {"temperature": 5000.0}, {"steps": 10}])
-def test_fermeture_refusee_hors_bornes(tmp_path, kwargs):
-    out = nt.close_shuttles(tmp_path, **kwargs)
-    assert out["ok"] is False and "hors bornes" in out["errors"][0]
-    assert not list(tmp_path.iterdir())                             # rien n'a ete ecrit ni lance
-
-
 def test_oscillateur_refuse_hors_bornes(tmp_path):
     assert nt.oscillator(tmp_path, steps=10_000_000)["ok"] is False
 

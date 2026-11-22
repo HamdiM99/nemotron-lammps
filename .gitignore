@@ -15,3 +15,6 @@ bench/runs_v2/
 bench/runs_i03/
 runs_nt/
 viewer/nanotube_artifact.html
+runs_fs/
+viewer/fullerene_artifact.html
+runs_fs_agent/

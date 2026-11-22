@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-nanotube_lab.py - navettes de nanotubes tete-beche : proprietes electromecaniques, taille reduite.
+nanotube_lab.py - navettes de nanotubes tete-beche : proprietes electromecaniques statiques, taille reduite.
 
-Reprend, a l'echelle d'un PC, le dispositif de M. Hamdi et al., "Rotary Nanomotors Based on Head-to-head
+Reprend, a l'echelle d'un PC, la geometrie de M. Hamdi et al., "Rotary Nanomotors Based on Head-to-head
 Nanotube Shuttles", ICRA 2010 : deux nanotubes a double paroi alignes, dont les coeurs sont attires l'un
 vers l'autre par une tension. Meme principe que graphene_agent : les parametres sont bornes, c'est le code
 qui ecrit l'input LAMMPS, et chaque resultat passe un controle de plausibilite.
@@ -12,11 +12,14 @@ Ce que le module calcule (pipeline deterministe, sans LLM) :
   charges  distribution de charge d'un tube porte a un potentiel, capacite (methode des moments, charges gaussiennes)
   force    force electrostatique entre les deux coeurs et tension de seuil, en fonction de l'ecart
   osc      oscillateur telescopique en dynamique moleculaire, frequence comparee a l'estimation analytique
-  close    fermeture des deux navettes sous tension, glissement et rotation des coeurs
   all      tout, puis ecrit <workdir>/results.json
 
+Ce module sert aussi de bibliotheque a fullerene_shuttle.py (tubes, solveur de charges, lanceur LAMMPS).
+
 ATTENTION, ce n'est pas une reproduction de l'article : tubes (5,5)@(10,10) de 5 nm au lieu de 10 parois
-de 200 nm, paroi externe figee, charges fixees pendant la dynamique.
+de 200 nm, parois rigides. La rotation des coeurs n'est PAS traitee ici : les essais de fermeture sous tension
+faits sur ce modele reduit (paires armchair et chirales, jusqu'a 100 ps) n'ont pas montre de rotation
+entretenue, et ont ete retires du depot.
 
 Dependances : LAMMPS (lmp) avec CH.airebo, numpy.
 """
@@ -47,9 +50,6 @@ THREADS = 8                # fils OpenMP pour la dynamique
 BOUNDS = {
     "n_inner": (4, 8),            # tube interne (n,n) ; l'externe est (n+5,n+5), ecart entre parois 3,39 A
     "cells": (8, 40),             # longueur en mailles de 2,46 A
-    "gap_A": (8.0, 60.0),         # ecart entre les deux navettes
-    "voltage_V": (0.5, 30.0),
-    "temperature_K": (1.0, 600.0),
     "steps": (1000, 400_000),
 }
 MAX_ATOMS = 12_000
@@ -363,76 +363,6 @@ run {steps}
     return out
 
 
-def close_shuttles(workdir: Path, n: int = 5, cells: int = 20, gap: float = 15.0, volt: float = 10.0,
-                   temperature: float = 300.0, steps: int = 80_000) -> dict:
-    """Deux navettes tete-beche sous tension : les coeurs glissent l'un vers l'autre ; tournent-ils ?"""
-    errors = []
-    for name, v in (("gap_A", gap), ("voltage_V", volt), ("temperature_K", temperature), ("steps", steps)):
-        check(name, v, errors)
-    if errors:
-        return {"ok": False, "errors": errors}
-    groups = head_to_head(n, cells, gap)
-    pos = np.vstack(groups)
-    sizes = np.cumsum([0] + [len(g) for g in groups])
-    q = solve_charges(pos, np.where(np.arange(len(pos)) < sizes[2], volt / 2, -volt / 2))
-    qs = [q[sizes[k]:sizes[k + 1]] for k in range(4)]
-    zlo, zhi = float(pos[:, 2].min()) - 60.0, float(pos[:, 2].max()) + 60.0
-    write_data(workdir / "close.data", groups, (zlo, zhi), qs)
-    dt, every = DT_PS, max(1, steps // 160)
-    pot = potential()
-    text = HEADER.format(style="charge", zb="f", name="close") + AIREBO.format(pot=pot, cs="C C C C")
-    text += f"""group inner type 1 3
-group outer type 2 4
-group innerL type 1
-group innerR type 3
-fix hold outer setforce 0.0 0.0 0.0
-# relaxation des coeurs SANS les charges, pour ne pas commencer a glisser pendant la minimisation
-min_style cg
-minimize 1e-10 1e-10 2000 20000
-# puis on ajoute l'electrostatique : charges fixes, calculees pour la geometrie initiale a {volt} V
-neigh_modify one 6000 page 120000
-pair_style hybrid/overlay airebo 3.0 1 0 coul/cut 80.0
-pair_coeff * * airebo "{pot}" C C C C
-pair_coeff * * coul/cut
-reset_timestep 0
-timestep {dt}
-velocity inner create {temperature} 9172345 mom yes rot yes dist gaussian
-compute cmL innerL com
-compute cmR innerR com
-thermo_style custom step temp pe c_cmL[3] c_cmR[3]
-thermo 100
-thermo_modify flush yes
-fix move inner nve
-dump traj all custom {every} close.lammpstrj id type x y z
-dump_modify traj sort id
-run {steps}
-"""
-    cols = thermo_cols(lammps(workdir, "close", text, timeout=14400, threads=THREADS))
-    t = cols["Step"] * dt
-    steps_d, frames, types = read_dump(workdir / "close.lammpstrj")
-    res = {"ok": True, "gap_A": gap, "voltage_V": volt, "temperature_K": temperature, "steps": steps,
-           "time_ps": [round(float(v), 3) for v in t[::4]],
-           "zL_A": [round(float(v), 3) for v in (cols["c_cmL[3]"] - cols["c_cmL[3]"][0])[::4]],
-           "zR_A": [round(float(v), 3) for v in (cols["c_cmR[3]"] - cols["c_cmR[3]"][0])[::4]],
-           "q_core_e": round(float(qs[0].sum()), 4), "q_min_e": round(float(q.min()), 5), "q_max_e": round(float(q.max()), 5)}
-    # ecart entre les bouts des deux coeurs, et rotation de chaque coeur autour de l'axe
-    end_gap, rot = [], {1: [0.0], 3: [0.0]}
-    for f in frames:
-        end_gap.append(float(f[types == 3][:, 2].min() - f[types == 1][:, 2].max()))
-    for ty in (1, 3):
-        phi = np.arctan2(frames[:, types == ty, 1], frames[:, types == ty, 0])
-        d = np.diff(phi, axis=0)
-        d = (d + math.pi) % (2 * math.pi) - math.pi
-        rot[ty] = [0.0] + np.degrees(np.cumsum(d.mean(axis=1))).round(3).tolist()
-    tf = [round(s * dt, 3) for s in steps_d]
-    res.update({"frame_time_ps": tf, "end_gap_A": [round(v, 3) for v in end_gap],
-                "rotation_L_deg": rot[1], "rotation_R_deg": rot[3]})
-    contact = next((k for k, g in enumerate(end_gap) if g < 3.6), None)
-    res["contact_time_ps"] = tf[contact] if contact is not None else None
-    res["min_end_gap_A"] = round(min(end_gap), 3)
-    return res
-
-
 # --------------------------------------------------------------------------- #
 # Controles de plausibilite
 # --------------------------------------------------------------------------- #
@@ -457,12 +387,10 @@ def plausibility(r: dict) -> list:
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser(description="Navettes de nanotubes tete-beche (taille reduite)")
-    ap.add_argument("task", choices=["static", "charges", "force", "osc", "close", "all"])
+    ap.add_argument("task", choices=["static", "charges", "force", "osc", "all"])
     ap.add_argument("--workdir", default="runs_nt")
     ap.add_argument("--n", type=int, default=5)
     ap.add_argument("--cells", type=int, default=20)
-    ap.add_argument("--gap", type=float, default=15.0)
-    ap.add_argument("--volt", type=float, default=None, help="tension pour 'close' (defaut : 1,5 x le seuil)")
     ap.add_argument("--steps", type=int, default=None)
     a = ap.parse_args()
     errs = []
@@ -500,13 +428,5 @@ if __name__ == "__main__":
         res["oscillator"] = oscillator(wd, a.n, a.cells, steps=a.steps or 120_000, retraction_nN=f_ret)
         save()
         print("oscillateur :", {k: v for k, v in res["oscillator"].items() if not isinstance(v, list)})
-    if a.task in ("close", "all"):
-        thr = next((g.get("threshold_V") for g in res.get("force", {}).get("gaps", []) if g["gap_A"] == a.gap), None)
-        volt = a.volt or (round(1.5 * thr, 1) if thr else 10.0)
-        res["close"] = close_shuttles(wd, a.n, a.cells, a.gap, volt, steps=a.steps or 80_000)
-        if thr:
-            res["close"]["threshold_V"] = thr
-        save()
-        print("fermeture :", {k: v for k, v in res["close"].items() if not isinstance(v, list)})
     save()
     print("avertissements :", res["warnings"] or "aucun")

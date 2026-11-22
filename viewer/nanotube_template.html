@@ -81,6 +81,12 @@ dl.facts dd { margin: 0; font: 500 0.9rem var(--mono); font-variant-numeric: tab
 .chart .s1 { stroke: var(--accent); stroke-width: 2; fill: none; stroke-linejoin: round }
 .chart .s2 { stroke: var(--pos); stroke-width: 2; fill: none; stroke-linejoin: round }
 .chart .s3 { stroke: var(--ink); stroke-width: 1.5; stroke-dasharray: 6 4; fill: none }
+.chart .s1d { stroke: var(--accent); stroke-width: 1.5; stroke-dasharray: 5 4; fill: none }
+.chart .s2d { stroke: var(--pos); stroke-width: 1.5; stroke-dasharray: 5 4; fill: none }
+.sw.s1d { border-top: 2px dashed var(--accent) } .sw.s2d { border-top: 2px dashed var(--pos) }
+table.rates { border-collapse: collapse; width: 100%; font: 0.8rem var(--mono); font-variant-numeric: tabular-nums }
+table.rates th { text-align: left; font: 500 0.72rem var(--body); color: var(--muted); padding: 4px 6px 4px 0; border-bottom: 1px solid var(--line) }
+table.rates td { padding: 5px 6px 5px 0; border-bottom: 1px solid var(--line) }
 .chart .m1 { fill: var(--accent); stroke: var(--surface); stroke-width: 2 }
 .chart .bandr { fill: var(--band); stroke: none }
 .chart .hair { stroke: var(--muted); stroke-width: 1; fill: none }
@@ -103,21 +109,20 @@ footer { font-size: 0.78rem; color: var(--muted) }
 <div class="wrap">
   <header>
     <span class="eyebrow">Molecular dynamics and electrostatics · reduced-size model</span>
-    <h1>Two head-to-head nanotube shuttles, pulled together by a voltage</h1>
+    <h1>Two head-to-head nanotube shuttles: static electromechanical properties</h1>
     <p class="lede">After <b>M. Hamdi et al., “Rotary Nanomotors Based on Head-to-head Nanotube Shuttles”, ICRA 2010</b>.
-      Same mechanism at PC scale: two <span id="h-tube"></span> double-wall tubes, <span id="h-len"></span> nm long.
-      This is a reduced model, not a reproduction of the paper.</p>
+      Same geometry at PC scale: two <span id="h-tube"></span> double-wall tubes, <span id="h-len"></span> nm long.
+      This is a reduced model, not a reproduction of the paper, and it reports no rotation.</p>
   </header>
 
   <section class="bench">
     <div class="panel">
       <div class="stage" id="stage">
-        <canvas id="gl" aria-label="3D view of the two nanotube shuttles closing under voltage"></canvas>
+        <canvas id="gl" aria-label="3D view of the two nanotube shuttles with the charge on the core atoms"></canvas>
         <div class="readout">
-          <span class="eyebrow">Gap between the two cores</span>
+          <span class="eyebrow">Gap between the two shuttles</span>
           <span class="big" id="r-gap">–</span>
           <span class="mono muted" id="r-time"></span>
-          <span class="mono muted" id="r-rot"></span>
         </div>
       </div>
       <div class="legend3d">
@@ -126,12 +131,6 @@ footer { font-size: 0.78rem; color: var(--muted) }
         <span id="l-volt" class="mono"></span>
       </div>
       <div class="transport">
-        <button class="primary" id="play" type="button">Play</button>
-        <input type="range" id="scrub" min="0" max="0" value="0" step="1" aria-label="Trajectory frame">
-        <span class="mono muted" id="r-frame"></span>
-        <select id="speed" aria-label="Playback speed">
-          <option value="8">Slow</option><option value="20" selected>Normal</option><option value="45">Fast</option>
-        </select>
         <button id="view-side" type="button">Side view</button>
         <button id="view-axis" type="button">Along the axis</button>
       </div>
@@ -162,7 +161,6 @@ footer { font-size: 0.78rem; color: var(--muted) }
         <li><b>Charges</b>: every atom of a tube sits at the same potential; the code solves the linear system for Gaussian charges on the atoms (atomistic moment method).</li>
         <li><b>Electrostatic force and pull-in voltage</b>: Coulomb force on one core from all other charges; the threshold is where it exceeds the van der Waals retraction force. It scales with the square of the voltage.</li>
         <li><b>Telescoping oscillator</b>: the core is pulled out and released; the measured frequency is checked against the estimate from the retraction force.</li>
-        <li><b>Closing run</b>: both shuttles under voltage, charges kept fixed, outer walls held; the code tracks the gap and the rotation of each core.</li>
       </ul>
     </div>
     <div class="panel block">
@@ -171,9 +169,8 @@ footer { font-size: 0.78rem; color: var(--muted) }
       <ul>
         <li>Two walls and <span id="s-len"></span> nm instead of ten walls and 200 nm: far less charge, so the pull-in voltage here is much higher than the ~5 V of the paper.</li>
         <li>The field needed at this size is beyond what a real device would sustain. Read the trend, not the value.</li>
-        <li>Charges are computed once and kept fixed during the dynamics; outer walls do not move.</li>
-        <li>A short run on small tubes neither confirms nor refutes the rotation reported in the paper.</li>
-        <li>Open tube ends are reactive with this potential: the cores can bond when they touch.</li>
+        <li>Shells are rigid in the static scans; only the oscillator run lets the core move.</li>
+        <li><b>No rotation result.</b> Closing runs under voltage on this reduced model (armchair and chiral pairs, up to 100 ps) did not show sustained rotation of the cores. They were removed from this page and from the repository.</li>
       </ul>
     </div>
   </section>
@@ -188,13 +185,12 @@ const Q = new URLSearchParams(location.search), CAP = Q.has("capture");
 if (CAP) document.body.classList.add("capture");
 const fx = (v, d) => v == null ? "–" : Number(v).toLocaleString("en-US", { minimumFractionDigits: d, maximumFractionDigits: d });
 const css = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-const R = D.results, S = R.static || {}, C = R.charges || {}, F = R.force || { gaps: [] }, O = R.oscillator || {}, K = R.close || {};
-
+const R = D.results, S = R.static || {}, C = R.charges || {}, F = R.force || { gaps: [] }, O = R.oscillator || {};
 /* ---------- textes ---------- */
 $("h-tube").textContent = "(" + S.n_inner + "," + S.n_inner + ")@(" + S.n_outer + "," + S.n_outer + ")";
 $("h-len").textContent = fx(S.length_nm, 1);
 $("s-len").textContent = fx(S.length_nm, 1);
-const demoGap = K.gap_A || (F.gaps[0] || {}).gap_A;
+const demoGap = (F.gaps[0] || {}).gap_A;
 const demo = F.gaps.find(g => g.gap_A === demoGap) || F.gaps[0] || {};
 $("v-thr").textContent = fx(demo.threshold_V, 1);
 $("v-note").textContent = "Voltage at which the electrostatic pull on a core exceeds the van der Waals retraction force, for a "
@@ -212,9 +208,6 @@ const facts = [
   ["Electrostatic pull at contact", fx((demo.scan || []).length ? demo.scan[demo.scan.length - 1].force_nN_per_V2 * 1000 : null, 1) + " pN/V²"],
   ["Oscillation, measured", O.frequency_GHz ? fx(O.frequency_GHz, 1) + " GHz" : "–"],
   ["Oscillation, estimated", O.analytic_frequency_GHz ? fx(O.analytic_frequency_GHz, 1) + " GHz" : "–"],
-  ["Closing run", K.ok ? fx(K.voltage_V, 1) + " V, " + fx(K.temperature_K, 0) + " K" : "–"],
-  ["Cores in contact after", K.contact_time_ps != null ? fx(K.contact_time_ps, 1) + " ps" : "no contact"],
-  ["Core rotation at the end", K.ok ? fx(K.rotation_L_deg[K.rotation_L_deg.length - 1], 1) + "° / " + fx(K.rotation_R_deg[K.rotation_R_deg.length - 1], 1) + "°" : "–"],
 ];
 for (const [k, v] of facts) {
   const d = document.createElement("div");
@@ -288,104 +281,67 @@ if (S.pull) { const s = S.pull.extraction_A, e = S.pull.energy_eV, k = S.retract
 if (O.z_A) chart({ title: "Telescoping oscillator", xl: "time (ps)", yl: "core displacement (Å)", xs: "t", xd: 1, yd: 1,
   series: [{ name: "displacement", cls: "s1", x: O.time_ps, y: O.z_A }],
   caption: O.frequency_GHz ? "Measured " + fx(O.frequency_GHz, 1) + " GHz, estimated " + fx(O.analytic_frequency_GHz, 1) + " GHz from the retraction force." : "" });
-if (K.end_gap_A) chart({ title: "Closing under voltage", xl: "time (ps)", yl: "gap between core ends (Å)", xs: "t", xd: 1, yd: 1, yzero: true,
-  series: [{ name: "gap", cls: "s1", x: K.frame_time_ps, y: K.end_gap_A }],
-  caption: fx(K.voltage_V, 1) + " V across a " + fx(K.gap_A / 10, 1) + " nm gap, " + fx(K.temperature_K, 0) + " K. Below about 1.5 Å the open ends have bonded." });
-if (K.rotation_L_deg) chart({ title: "Rotation of the two cores", xl: "time (ps)", yl: "rotation about the axis (°)", xs: "t", xd: 1, yd: 1,
-  series: [{ name: "left core", cls: "s1", x: K.frame_time_ps, y: K.rotation_L_deg }, { name: "right core", cls: "s2", x: K.frame_time_ps, y: K.rotation_R_deg }],
-  caption: "Mean angle of each core about the axis. It fluctuates; no sustained rotation over this run." });
-
-/* ---------- trajectoire 3D ---------- */
-const T = D.traj;
-const scrub = $("scrub"), playBtn = $("play");
-let cur = 0, playing = false, acc = 0, last = 0, draw3d = () => {};
-const NF = T ? T.frames : 1;
-scrub.max = NF - 1;
-function show(f) {
-  cur = f; scrub.value = f;
-  if (K.end_gap_A) {
-    $("r-gap").textContent = fx(K.end_gap_A[f], 1) + " Å";
-    $("r-time").textContent = "t = " + fx(K.frame_time_ps[f], 1) + " ps";
-    $("r-rot").textContent = "rotation " + fx(K.rotation_L_deg[f], 1) + "° / " + fx(K.rotation_R_deg[f], 1) + "°";
-  }
-  $("r-frame").textContent = "frame " + (f + 1) + " / " + NF;
-  draw3d(f);
+/* ---------- vue 3D ---------- */
+/* geometrie de depart des deux navettes, coeurs colores par la charge calculee a la tension de seuil ; image fixe */
+const T = D.geom;
+if (T) {
+  $("r-gap").textContent = fx(T.gap_A / 10, 1) + " nm";
+  $("r-time").textContent = "charges at " + fx(T.voltage_V, 1) + " V";
+  $("l-volt").textContent = fx(T.voltage_V, 1) + " V between the shuttles (pull-in voltage)";
 }
-function setPlaying(on) { playing = on; playBtn.textContent = on ? "Pause" : "Play"; if (on) { last = performance.now(); requestAnimationFrame(tick); } }
-function tick(now) {
-  if (!playing) return;
-  acc += (now - last) / 1000 * Number($("speed").value); last = now;
-  if (acc >= 1) { const step = Math.floor(acc); acc -= step; show((cur + step) % NF); }
-  requestAnimationFrame(tick);
-}
-playBtn.addEventListener("click", () => setPlaying(!playing));
-scrub.addEventListener("input", () => { setPlaying(false); show(Number(scrub.value)); });
-if (K.ok) $("l-volt").textContent = fx(K.voltage_V, 1) + " V between the shuttles";
-
 (function () {
   const stage = $("stage"), canvas = $("gl");
   let renderer;
-  try { if (!window.THREE || !T) throw 0; renderer = new THREE.WebGLRenderer({ canvas, antialias: true }); }
+  try { if (!window.THREE || !T) throw 0; renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: CAP }); }
   catch (e) {
     canvas.hidden = true;
     stage.appendChild(Object.assign(document.createElement("div"), { className: "fallback",
-      textContent: T ? "The 3D view could not start in this browser (WebGL unavailable). The numbers and curves are unaffected." : "No closing trajectory in this data set." }));
+      textContent: "The 3D view could not start in this browser (WebGL unavailable). The numbers and curves are unaffected." }));
     return;
   }
   const dec = b64 => new Int16Array(Uint8Array.from(atob(b64), c => c.charCodeAt(0)).buffer);
   const qi = dec(T.inner), qo = dec(T.outer), NI = T.n_inner, NO = T.n_outer;
   /* axe du tube (z de LAMMPS) place a l'horizontale : (X, Y, Z) = (z, x, y) */
-  const innerAt = (f, i) => { const o = (f * NI + i) * 3; return [qi[o + 2] / 100, qi[o] / 100, qi[o + 1] / 100]; };
+  const innerAt = i => [qi[3 * i + 2] / 100, qi[3 * i] / 100, qi[3 * i + 1] / 100];
   const outerAt = i => [qo[3 * i + 2] / 100, qo[3 * i] / 100, qo[3 * i + 1] / 100];
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
   const scene = new THREE.Scene(), cam = new THREE.PerspectiveCamera(28, 16 / 9, 1, 5000);
   cam.up.set(0, 0, 1);
   scene.add(new THREE.HemisphereLight(0xffffff, 0x556070, 0.9));
   const sun = new THREE.DirectionalLight(0xffffff, 0.65); sun.position.set(0.3, -0.7, 1); scene.add(sun);
-
   const pairs = (n, at) => { const p = [], pos = []; for (let i = 0; i < n; i++) pos.push(at(i));
     for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) { const dx = pos[i][0] - pos[j][0]; if (dx > 1.8 || dx < -1.8) continue;
       const dy = pos[i][1] - pos[j][1], dz = pos[i][2] - pos[j][2]; if (dx * dx + dy * dy + dz * dz < 3.24) p.push(i, j); } return p; };
-  /* parois externes : figees, dessinees une fois, en transparence pour laisser voir les coeurs */
+  /* parois externes : en transparence pour laisser voir les coeurs */
   const wallPos = []; const bo = pairs(NO, outerAt);
   for (let k = 0; k < bo.length; k += 2) wallPos.push(...outerAt(bo[k]), ...outerAt(bo[k + 1]));
   const wallGeo = new THREE.BufferGeometry(); wallGeo.setAttribute("position", new THREE.Float32BufferAttribute(wallPos, 3));
   const walls = new THREE.LineSegments(wallGeo, new THREE.LineBasicMaterial({ transparent: true, opacity: 0.32 }));
   scene.add(walls);
-  /* coeurs : atomes colores par leur charge, liaisons de la premiere image */
   const atoms = new THREE.InstancedMesh(new THREE.SphereGeometry(0.42, 12, 8), new THREE.MeshLambertMaterial(), NI);
-  const bi = pairs(NI, i => innerAt(0, i)), NB = bi.length / 2;
+  const bi = pairs(NI, innerAt), NB = bi.length / 2;
   const bonds = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.15, 0.15, 1, 6, 1, true), new THREE.MeshLambertMaterial(), NB);
   atoms.frustumCulled = bonds.frustumCulled = false;
   scene.add(atoms, bonds);
   const qmax = Math.max(...T.q_inner.map(Math.abs)) || 1;
   const col = {}, tmp = new THREE.Color(), dummy = new THREE.Object3D(), up = new THREE.Vector3(0, 1, 0), dir = new THREE.Vector3();
+  const P = []; for (let i = 0; i < NI; i++) P.push(innerAt(i));
+  for (let i = 0; i < NI; i++) { dummy.position.set(P[i][0], P[i][1], P[i][2]); dummy.updateMatrix(); atoms.setMatrixAt(i, dummy.matrix); }
+  for (let k = 0; k < NB; k++) {
+    const a = P[bi[2 * k]], b = P[bi[2 * k + 1]], dx = b[0] - a[0], dy = b[1] - a[1], dz = b[2] - a[2], len = Math.sqrt(dx * dx + dy * dy + dz * dz);
+    dir.set(dx, dy, dz).divideScalar(len); dummy.quaternion.setFromUnitVectors(up, dir);
+    dummy.position.set(a[0] + dx / 2, a[1] + dy / 2, a[2] + dz / 2); dummy.scale.set(1, len, 1); dummy.updateMatrix(); bonds.setMatrixAt(k, dummy.matrix);
+  }
   function theme() {
     for (const k of ["stage", "pos", "neg", "bond", "wall"]) col[k] = new THREE.Color(css("--" + k));
     renderer.setClearColor(col.stage, 1);
     walls.material.color.copy(col.wall);
-    for (let i = 0; i < NI; i++) {
-      const t = Math.max(-1, Math.min(1, T.q_inner[i] / qmax)), s = Math.pow(Math.abs(t), 0.6);
-      tmp.copy(col.bond).lerp(t >= 0 ? col.pos : col.neg, s); atoms.setColorAt(i, tmp);
-    }
+    for (let i = 0; i < NI; i++) { const t = Math.max(-1, Math.min(1, T.q_inner[i] / qmax)), s = Math.pow(Math.abs(t), 0.6);
+      tmp.copy(col.bond).lerp(t >= 0 ? col.pos : col.neg, s); atoms.setColorAt(i, tmp); }
     atoms.instanceColor.needsUpdate = true;
     for (let k = 0; k < NB; k++) bonds.setColorAt(k, col.bond);
     bonds.instanceColor.needsUpdate = true;
   }
-  draw3d = function (f) {
-    const P = []; for (let i = 0; i < NI; i++) P.push(innerAt(f, i));
-    for (let i = 0; i < NI; i++) { dummy.position.set(P[i][0], P[i][1], P[i][2]); dummy.quaternion.identity(); dummy.scale.set(1, 1, 1); dummy.updateMatrix(); atoms.setMatrixAt(i, dummy.matrix); }
-    atoms.instanceMatrix.needsUpdate = true;
-    let n = 0;
-    for (let k = 0; k < NB; k++) {
-      const a = P[bi[2 * k]], b = P[bi[2 * k + 1]], dx = b[0] - a[0], dy = b[1] - a[1], dz = b[2] - a[2], len = Math.sqrt(dx * dx + dy * dy + dz * dz);
-      if (len > 2.0) continue;
-      dir.set(dx, dy, dz).divideScalar(len); dummy.quaternion.setFromUnitVectors(up, dir);
-      dummy.position.set(a[0] + dx / 2, a[1] + dy / 2, a[2] + dz / 2); dummy.scale.set(1, len, 1); dummy.updateMatrix(); bonds.setMatrixAt(n++, dummy.matrix);
-    }
-    bonds.count = n; bonds.instanceMatrix.needsUpdate = true;
-    render();
-  };
   let span = 0; for (let i = 0; i < NO; i++) span = Math.max(span, Math.abs(outerAt(i)[0])); span *= 2;
   let az = Q.has("az") ? Number(Q.get("az")) : -0.22, pol = 1.25, dist = span * 1.32;
   function render() {
@@ -403,12 +359,9 @@ if (K.ok) $("l-volt").textContent = fx(K.voltage_V, 1) + " V between the shuttle
   $("view-axis").addEventListener("click", () => { az = -1.45; pol = 1.45; dist = span * 0.75; render(); });
   function resize() { const w = stage.clientWidth, h = stage.clientHeight; if (!w || !h) return; renderer.setSize(w, h, false); cam.aspect = w / h; cam.updateProjectionMatrix(); render(); }
   new ResizeObserver(resize).observe(stage);
-  const retheme = () => { theme(); draw3d(cur); };
+  const retheme = () => { theme(); render(); };
   matchMedia("(prefers-color-scheme: dark)").addEventListener("change", retheme);
   new MutationObserver(retheme).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
   theme(); resize();
 })();
-
-show(CAP ? Math.max(0, Math.min(NF - 1, Number(Q.get("f")) || 0)) : 0);
-if (!CAP && T && !matchMedia("(prefers-reduced-motion: reduce)").matches) setPlaying(true);
 </script>
